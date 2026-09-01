@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.bun/
+*.log
+.wrangler/
+.dev.vars
+worker-configuration.d.ts
+.env
+.env.*
+!.env.example
+*.skill

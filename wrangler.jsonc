@@ -1,0 +1,41 @@
+// Cloudflare Worker configuration for Stupid Upload
+{
+  "name": "stupid-upload",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "STUPID_UPLOAD_BASE_URL": "https://upload.stupidtech.net",
+    "STUPID_UPLOAD_FILES_HOST": "https://files.upload.stupidtech.net",
+    "STUPID_UPLOAD_GLOBAL_DAILY_QUOTA_BYTES": "10737418240"
+  },
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "stupid-upload"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stupid-upload",
+      "database_id": "replace-me-with-a-real-d1-database-id",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "rate_limits": [
+    {
+      "binding": "LIMITER",
+      "name": "stupid_upload_global",
+      "period": 60,
+      "limit": 60
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
+}

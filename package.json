@@ -1,0 +1,39 @@
+{
+  "name": "stupid-upload",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Accountless, agent-first public file upload service on Cloudflare",
+  "bin": {
+    "stupid-upload": "./skills/stupid-upload/scripts/stupid-upload.ts"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply stupid-upload --local",
+    "db:migrate": "wrangler d1 migrations apply stupid-upload",
+    "lint": "oxlint src test skills",
+    "format": "oxfmt src test skills",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@x402/core": "^2.24.0",
+    "@x402/evm": "^2.24.0",
+    "@x402/fetch": "^2.24.0",
+    "@x402/hono": "^2.24.0",
+    "hono": "4.13.3",
+    "zod": "4.5.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260828.1",
+    "@types/node": "^26.4.0",
+    "oxfmt": "0.64.0",
+    "oxlint": "1.79.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.127.0"
+  }
+}
