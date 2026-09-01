@@ -6,13 +6,15 @@ infrastructure details, or raw user data.
 
 ## Status
 
-Delivered phases 1–4 plus a partial 6 of [handover.md](./handover.md): a
-Bun/TypeScript/Hono Worker core with pricing, temporary reservation/upload/
+Delivered phases 1–4, partial 6, and deployment of 8 of [handover.md](./handover.md):
+a Bun/TypeScript/Hono Worker running with pricing, temporary reservation/upload/
 download/HEAD/range, deletion, feedback, quotas, security headers, cleanup
-scheduler, discovery endpoints, dynamic x402 pricing on the permanent route,
-and a standalone self-contained CLI + skill with a txlink signature-request
-fallback, and a Vitest suite. Phases 5, 7–10 (OpenAPI/API validation, skill
-packaging, production deploy + paid mainnet) are deferred.
+scheduler, discovery endpoints, dynamic x402 pricing, and a self-contained CLI
++ skill (txlink fallback + real x402 client signing), with a Vitest suite.
+Deployed to production behind `https://upload.stupidtech.net` (D1 + R2
+provisioned, migrations applied, secrets set). Phases 5, 7, 9–10 (OpenAPI/API
+validation, skill packaging, the mainnet paid tier, and its verification) are
+deferred.
 
 ## Decisions
 
@@ -100,6 +102,16 @@ packaging, production deploy + paid mainnet) are deferred.
   requires a caller `Idempotency-Key` (generic x402 clients don't send one); a
   synthesized per-request key keeps `(source, key)` unique. The temporary route
   still requires it.
+- Phase 8 (production deploy): provisioned D1 (`stupid-upload`, WEUR) and R2
+  (`stupid-upload`), applied the migration remotely, set the two secrets, and
+  deployed the worker behind the custom domain `https://upload.stupidtech.net`
+  (workers.dev + custom domain both live). Verified end-to-end on prod:
+  temp reservation → `PUT` bytes → public download with `nosniff`.
+- Permanent (paid) tier is **disabled in prod** (returns `501`) until Phase 9
+  (Base mainnet + a reachable mainnet facilitator + recipient address). A
+  dedicated `files.upload.*` isolation host and the R2 `temporary/`
+  lifecycle rule are noted as follow-ups (both need either zone/ R2
+  credentials beyond the deploy token). See `docs/operations.md`.
 
 - Initialized the implementation notes.
 - Scaffolded the Bun/TypeScript/Hono worker, `wrangler.jsonc` bindings (R2,

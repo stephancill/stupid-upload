@@ -5,12 +5,15 @@
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "routes": [
+    { "pattern": "upload.stupidtech.net", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true
   },
   "vars": {
     "STUPID_UPLOAD_BASE_URL": "https://upload.stupidtech.net",
-    "STUPID_UPLOAD_FILES_HOST": "https://files.upload.stupidtech.net",
+    "STUPID_UPLOAD_FILES_HOST": "https://upload.stupidtech.net",
     "STUPID_UPLOAD_GLOBAL_DAILY_QUOTA_BYTES": "10737418240"
   },
   "r2_buckets": [
@@ -23,16 +26,8 @@
     {
       "binding": "DB",
       "database_name": "stupid-upload",
-      "database_id": "replace-me-with-a-real-d1-database-id",
+      "database_id": "53ad3cc3-7b9c-459f-a990-0a807173f1b6",
       "migrations_dir": "migrations"
-    }
-  ],
-  "rate_limits": [
-    {
-      "binding": "LIMITER",
-      "name": "stupid_upload_global",
-      "period": 60,
-      "limit": 60
     }
   ],
   "triggers": {
