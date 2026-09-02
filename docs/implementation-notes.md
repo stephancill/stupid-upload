@@ -122,6 +122,12 @@ Completed in this pass (2026-09-02):
 
 ## Change Log
 
+### 2026-09-02 (wallet QR placement)
+
+- On the landing page, the wallet-approval QR now renders above the approve
+  link (previously inline after it) and hides once the txlink `wallet_sign`
+  response is received, so the QR doesn't linger after approval.
+
 ### 2026-09-02 (inline image previews)
 
 - File responses now serve safe content inline instead of forcing a download.

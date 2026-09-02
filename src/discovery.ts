@@ -589,7 +589,7 @@ export function registerDiscovery(): void {
 </form>
 <p id="upload-status" role="status" aria-live="polite"></p>
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
-<p id="wallet-result" hidden><a id="wallet-link" target="_blank" rel="noopener">Approve the payment in your wallet</a>. Waiting for approval...<span id="wallet-qr"></span></p>
+<p id="wallet-result" hidden><span id="wallet-qr"></span><a id="wallet-link" target="_blank" rel="noopener">Approve the payment in your wallet</a>. Waiting for approval...</p>
 <h2>From the terminal</h2>
 <pre><code>npx --yes stupid-upload upload ./file</code></pre>
 <h2>Permanent storage</h2>
@@ -679,5 +679,5 @@ function page(title: string, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
 <meta name="description" content="${description}"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:type" content="website"><meta property="og:url" content="https://upload.stupidtech.net"><meta property="og:image" content="https://upload.stupidtech.net/og.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/png" href="/favicon.png">
 <meta http-equiv="content-security-policy" content="default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; connect-src 'self' https://txlink.stupidtech.net">
-<style>body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.6}code,pre{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}pre{padding:1rem;overflow:auto}form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}input,button{font:inherit}button{padding:.25rem .75rem}canvas{display:block;margin-top:.5rem}</style></head><body>${body}</body></html>`;
+<style>body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.6}code,pre{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}pre{padding:1rem;overflow:auto}form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}input,button{font:inherit}button{padding:.25rem .75rem}canvas{display:block;margin-top:.5rem}#wallet-qr img{display:block;margin:0 0 .5rem}</style></head><body>${body}</body></html>`;
 }
