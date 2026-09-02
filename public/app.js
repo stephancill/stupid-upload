@@ -130,6 +130,7 @@ function showResult(url, message) {
   link.textContent = url;
   result.hidden = false;
   status.textContent = message;
+  input.value = '';
 }
 
 form.addEventListener('submit', async (event) => {
