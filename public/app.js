@@ -50,6 +50,7 @@ function removeFromHistory(id) {
 }
 
 async function deleteUpload(entry, button) {
+  if (!confirm('Permanently delete this upload? This cannot be undone.')) return;
   button.disabled = true;
   status.textContent = 'Deleting...';
   try {
