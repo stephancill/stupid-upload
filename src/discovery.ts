@@ -580,13 +580,12 @@ export function registerDiscovery(): void {
 <form id="upload-form"><input id="file" name="file" type="file" required><button type="submit">Upload</button></form>
 <p id="upload-status" role="status" aria-live="polite"></p>
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
-<h2>From an agent</h2>
+<h2>From the terminal</h2>
 <pre><code>npx --yes stupid-upload upload ./file</code></pre>
-<p><a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">Agent skill</a></p>
-<h2>Long-term from an agent</h2>
+<h2>Long-term from the terminal</h2>
 <p>Paid with Base USDC via x402. Up to 100 MiB, with no scheduled expiration.</p>
 <pre><code>npx --yes stupid-upload upload ./file --permanent</code></pre>
-<p><a href="https://www.npmjs.com/package/stupid-upload">npm</a> &middot; <a href="/docs">API docs</a> &middot; <a href="https://github.com/stephancill/stupid-upload">source</a></p>
+<p><a href="https://github.com/stephancill/stupid-upload">github</a> - <a href="https://x.com/stephancill">twitter</a> - <a href="https://stupidtech.net">stupidtech.net</a> - <a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">skill</a></p>
 <script type="module">
 const form = document.querySelector("#upload-form");
 const input = document.querySelector("#file");

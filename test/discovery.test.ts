@@ -30,8 +30,12 @@ describe("discovery endpoints", () => {
     expect(html).toContain("<h1>stupid upload</h1>");
     expect(html).toContain('id="upload-form"');
     expect(html).toContain('fetch("/v1/uploads/temporary"');
+    expect(html).toContain("<h2>From the terminal</h2>");
+    expect(html).not.toContain("From an agent");
     expect(html).toContain("npx --yes stupid-upload upload ./file");
     expect(html).not.toContain("stupid-upload@0.0.2");
+    expect(html).toContain(">twitter</a> - <a");
+    expect(html).toContain(">stupidtech.net</a> - <a");
     expect(html).toContain("/tree/main/skills/stupid-upload");
     expect(html).toContain('property="og:image"');
     expect(html).toContain('href="/favicon.png"');
