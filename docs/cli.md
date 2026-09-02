@@ -24,19 +24,25 @@ stupid-upload <command>
 - `STUPID_UPLOAD_PRIVATE_KEY` — when set, `upload --permanent` signs and pays
   locally via `@x402/evm` + `@x402/fetch` (`wrapFetchWithPayment`): the CLI
   auto-pays the server's x402 challenge and returns the paid reservation.
-  Needs a funded Base Sepolia account (and a live, reachable facilitator);
-  never read the key from a CLI flag.
+  Needs a funded Base account (and a live, reachable facilitator); never read
+  the key from a CLI flag.
+- `STUPID_UPLOAD_SIGN_TIMEOUT_MS` — how long `upload --permanent` waits for a
+  human to approve the no-key txlink signature (default 5 minutes).
 
 ## Commands
 
 ```text
 stupid-upload quote <path>
 stupid-upload upload <path> --temporary
-stupid-upload upload <path> --permanent
+stupid-upload upload <path> --permanent [--max-price-usd <n>]
 stupid-upload status <id>
 stupid-upload delete <id> [--token <delete-token>]
 stupid-upload feedback --category <category> --message <text> [--rating 1-5]
 ```
+
+`--max-price-usd` (permanent) caps the quoted payment at `n` US dollars; it
+fails closed before any wallet is invoked if the server's x402 amount exceeds
+the cap. Default cap is the v1 maximum ($0.2085).
 
 ## Output
 
@@ -47,17 +53,26 @@ stupid-upload feedback --category <category> --message <text> [--rating 1-5]
 - Paid (`--permanent`):
   - with `STUPID_UPLOAD_PRIVATE_KEY` set, signs + pays via `@x402/fetch`'s
     `wrapFetchWithPayment` and returns the settled reservation in one call;
-  - without a key, returns an `awaitingSignature` object with the txlink
-    `signatureRequest.url` and `statusUrl`. Approve in a wallet, poll
-    `statusUrl`, then retry with the same `Idempotency-Key` to claim the slot
-    without re-paying.
+  - without a key, the CLI builds the exact x402 payment via the **submit
+    seam** (`submit-exact.ts`). It captures the Permit2 witness typed-data the
+    `@x402/evm` scheme wants signed, asks a human wallet to sign it over txlink
+    (EIP-7871 `wallet_sign`, no payer address pre-committed), then splices the
+    returned signature + `account` into the payload and re-POSTs it as the
+    `PAYMENT-SIGNATURE` header so the CDP facilitator settles `exact`. You
+    approve the payment in your wallet; the command then completes the
+    upload and prints the reservation. It prints a structured
+    `approvalRequired` JSON line to **stderr** with the wallet URL, then polls
+    `statusUrl` until signed or the timeout elapses. A settled `402` means CDP
+    rejected the signature; the reason (when the server echoes it on the
+    `payment-required` header) is surfaced as the error.
 
 ## Examples
 
 ```sh
 stupid-upload quote ./report.pdf
 stupid-upload upload ./report.pdf --temporary
-stupid-upload upload ./report.pdf --permanent   # -> returns signatureRequest.url
+stupid-upload upload ./report.pdf --permanent   # prints a wallet url, then settles
+stupid-upload upload ./media/video.mp4 --permanent --max-price-usd 0.05
 stupid-upload status p_8A...
 stupid-upload feedback --category bug --message "xyz"
 ```

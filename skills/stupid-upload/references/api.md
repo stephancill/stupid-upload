@@ -26,11 +26,11 @@ Advertised machine contract: `/openapi.json`. Use the CLI for the paid path.
 
 - `POST /v1/uploads/temporary` — reserve a slot (needs a high-entropy
   `Idempotency-Key`). Body `{ filename, contentType, sizeBytes, sha256 }`.
-- `POST /v1/uploads/permanent` — paid. **Note:** the paid tier returns `501`
-  (server_error: not yet enabled) until production activates it; once enabled,
-  an unpaid request returns `402` + `PAYMENT-REQUIRED`, and the exact/`upto`
-  challenge is Base USDC. A retry with the same Idempotency-Key returns the
-  existing (funded) reservation without charging again.
+- `POST /v1/uploads/permanent` — paid. Once production enables it, an unpaid
+  request returns `402` + `PAYMENT-REQUIRED`; the exact challenge is Base USDC.
+  A retry with the same Idempotency-Key returns the existing (funded)
+  reservation without charging again. A solved payment is returned as the
+  `PAYMENT-SIGNATURE` header (base64 JSON `PaymentPayload`).
 - `PUT /v1/uploads/{id}/content` — stream bytes with `Authorization: Bearer
 <uploadToken>`, exact `Content-Length`, `application/octet-stream`.
 - `GET /v1/uploads/{id}` — status (no secrets).
@@ -54,6 +54,8 @@ route. Repeats return the existing reservation without consuming quota.
 ## CLI
 
 The CLI (`scripts/stupid-upload.ts`) emits stable JSON. Paid path without a
-key creates a txlink stored request (`signatureRequest.url` / `.statusUrl`);
-after the user approves and you obtain the signature, retry the same upload
-with the same `Idempotency-Key` to claim the slot.
+key builds the exact x402 payment via `submit-exact.ts` (a capturing signer
+derives the Permit2 witness typed-data), asks the wallet (EIP-7871
+`wallet_sign`) to sign it via txlink, then splices the returned signature +
+payer into the payload and submits it as `PAYMENT-SIGNATURE` to settle. Set
+`STUPID_UPLOAD_PRIVATE_KEY` to sign + settle automatically instead.

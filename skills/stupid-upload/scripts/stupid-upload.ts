@@ -3,19 +3,28 @@
 // Stupid Upload CLI.
 // Stable JSON to stdout; structured errors to stderr; documented exit codes.
 //
-// Paid uploads: with a private key we intend to sign + settle via @x402 (that
-// funded local path needs a live facilitator and is a later E2E). When no key
-// is set, upload --permanent creates a txlink stored request and returns its
-// url + statusUrl so a human can approve the payment signature.
-import { createHash, randomBytes } from "node:crypto";
+// Paid uploads: with a private key we sign + settle via @x402. When no key is
+// set, `upload --permanent` drives the canonical @x402 payment through a
+// capturing signer, asks a human wallet to sign the exact Permit2 witness via
+// txlink (EIP-7871), then submits the real signature as PAYMENT-SIGNATURE to
+// settle. The whole no-key flow completes end-to-end in one command.
+import { createHash } from "node:crypto";
 import { readFile, writeFile, rename, access } from "node:fs/promises";
 import path from "node:path";
 import {
   createTxlinkRequest,
-  describeRequest,
+  pollTxlinkRequest,
   type SignatureRequest,
   type SignatureRequestOptions,
 } from "./txlink";
+import {
+  applyWalletSignature,
+  assertWithinPriceCap,
+  captureExact,
+  DEFAULT_MAX_PRICE_USD,
+  encodePaymentSignatureHeader,
+  type WalletSignature,
+} from "./submit-exact";
 
 const MIB = 1048576;
 const MAX_TEMPORARY = MIB;
@@ -161,7 +170,11 @@ async function cmdTemporaryUpload(file: string, contentType?: string): Promise<u
   return { ok: true, command: "upload", retention: "temporary", ...body };
 }
 
-async function cmdPermanentUpload(file: string, contentType?: string): Promise<unknown> {
+async function cmdPermanentUpload(
+  file: string,
+  contentType?: string,
+  maxPriceUsdArg?: string,
+): Promise<unknown> {
   const { size, sha256 } = await statFile(file);
   if (size > MAX_PERMANENT) fail("validation", `file is ${size} bytes; max is 100 MiB`);
   const ct = contentType ?? guessContentType(file);
@@ -208,69 +221,134 @@ async function cmdPermanentUpload(file: string, contentType?: string): Promise<u
   const accept = paymentRequired?.accepts?.[0];
   const chainId = evmChainId(accept?.network);
 
+  // Build the exact x402 payment via the submit seam: @x402 derives the payload
+  // and captures the exact Permit2 witness typed-data it wants the wallet to
+  // sign, plus a placeholder payment (no funds move yet).
+  let captured;
+  try {
+    captured = await captureExact(paymentRequired);
+  } catch (e) {
+    fail("payment", e instanceof Error ? e.message : String(e));
+  }
+  const maxUsd = resolveMaxUsd(maxPriceUsdArg);
+  assertWithinPriceCap(captured.accepted, maxUsd);
+
   const sigOptions: SignatureRequestOptions = {
     method: "wallet_sign",
     chainId,
-    // EIP-7871 wallet_sign: no address is pre-committed; txlink substitutes the
-    // connected wallet. The typed-data is the exact Perm2 payment (address-free).
-    params: { version: "1.0", request: { type: "0x01", data: permit2TypedData(accept, chainId) } },
+    // EIP-7871 wallet_sign: no address pre-committed; txlink substitutes the
+    // payer. `captured.typedData` is the exact @x402 Permit2 witness
+    // (nonce/deadline/spender/domain) the server/CDP expects, so the later
+    // `exact` settlement is canonical.
+    params: { version: "1.0", request: { type: "0x01", data: captured.typedData } },
   };
   const sig: SignatureRequest = await createTxlinkRequest(sigOptions);
-  return {
-    ok: true,
-    command: "upload",
-    retention: "permanent",
-    status: "awaitingSignature",
-    sizeBytes: size,
-    sha256,
-    idempotencyKey: idem,
-    payment: { network: accept?.network, amount: accept?.amount, payTo: accept?.payTo },
-    signatureRequest: { id: sig.id, url: sig.url, statusUrl: sig.statusUrl },
-    note: describeRequest(sigOptions),
-  };
+
+  // Single structured diagnostic to stderr (never stdout) so a human can approve
+  // the payment signature; the machine-readable result goes to stdout below.
+  process.stderr.write(
+    JSON.stringify({
+      ok: true,
+      kind: "approvalRequired",
+      message: "approve the payment in your wallet",
+      url: sig.url,
+      idempotencyKey: idem,
+    }) + "\n",
+  );
+
+  const walletSig = await waitForSignature(sig);
+  const finalized = applyWalletSignature(captured.payload, walletSig);
+  const paymentHeaders = encodePaymentSignatureHeader(finalized);
+
+  const submit = await api("/v1/uploads/permanent", {
+    method: "POST",
+    headers: { "idempotency-key": idem, ...paymentHeaders },
+    body: JSON.stringify(meta),
+  });
+  if (submit.res.status === 201 && submit.body?.id) {
+    await putContent(file, submit.body);
+    return {
+      ok: true,
+      command: "upload",
+      retention: "permanent",
+      payer: walletSig.account,
+      ...submit.body,
+    };
+  }
+  const reason = submit.res.status === 402 ? decodePaymentReason(submit) : undefined;
+  fail("payment", reason ?? submit.body?.error?.message ?? "permanent request failed", {
+    http: submit.res.status,
+  });
 }
 
-const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-const X402_EXACT_PROXY = "0x402085c248EeA27D92E8b30b2C58ed07f9E20001";
+/** Default (v1 maximum) spend cap; allow a lower `--max-price-usd`. */
+function resolveMaxUsd(arg?: string): number {
+  if (!arg) return DEFAULT_MAX_PRICE_USD;
+  const v = Number(arg);
+  if (!Number.isFinite(v) || v <= 0) fail("usage", `invalid --max-price-usd: ${arg}`);
+  return v;
+}
 
-/**
- * EIP-712 signed data for the x402 v2 `exact` payment: a Permit2 *witness*
- * permit (`PermitWitnessTransferFrom`), matching the struct `@x402/evm` signs.
- * The `witness` carries the payee; there is deliberately no payer address, so it
- * pairs with EIP-7871 wallet_sign. A rejected permit moves no funds.
- */
-function permit2TypedData(accept: any, chainId: number): Record<string, unknown> {
-  const now = Math.floor(Date.now() / 1000);
-  const deadline = now + (Number(accept?.maxTimeoutSeconds) || 900);
-  const nonce = "0x" + randomBytes(32).toString("hex");
-  return {
-    domain: { name: "PERMIT2", chainId, verifyingContract: PERMIT2_ADDRESS },
-    types: {
-      PermitWitnessTransferFrom: [
-        { name: "permitted", type: "TokenPermissions" },
-        { name: "spender", type: "address" },
-        { name: "nonce", type: "uint256" },
-        { name: "deadline", type: "uint256" },
-        { name: "witness", type: "Witness" },
-      ],
-      TokenPermissions: [
-        { name: "token", type: "address" },
-        { name: "amount", type: "uint256" },
-      ],
-      Witness: [
-        { name: "to", type: "address" },
-        { name: "validAfter", type: "uint256" },
-      ],
-    },
-    primaryType: "PermitWitnessTransferFrom",
-    message: {
-      permitted: { token: accept?.asset, amount: accept?.amount ?? "0" },
-      spender: X402_EXACT_PROXY,
-      nonce,
-      deadline,
-      witness: { to: accept?.payTo, validAfter: now },
-    },
-  };
+const SIGN_TIMEOUT_MS: number = Number(process.env.STUPID_UPLOAD_SIGN_TIMEOUT_MS ?? 5 * 60_000);
+const WALLET_POLL_MS = 2000;
+
+/** Poll the txlink signature request until a wallet signs (or times out). */
+async function waitForSignature(request: SignatureRequest): Promise<WalletSignature> {
+  const deadline = Date.now() + SIGN_TIMEOUT_MS;
+  for (;;) {
+    const current = await pollTxlinkRequest(request.statusUrl);
+    if (current.status === "completed") {
+      return parseWalletSignature(request, current.result);
+    }
+    if (current.status === "failed") {
+      fail("payment", current.error ?? "the wallet signature request failed");
+    }
+    if (Date.now() >= deadline) {
+      fail("payment", `timed out waiting for the wallet signature; approve ${request.url}`, {
+        statusUrl: request.statusUrl,
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, WALLET_POLL_MS));
+  }
+}
+
+function parseWalletSignature(request: SignatureRequest, raw: string): WalletSignature {
+  let data: any = raw;
+  if (typeof raw === "string") {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      /* txlink may return a bare hex signature */
+    }
+  }
+  const nested = data?.result as Record<string, unknown> | undefined;
+  const sig = (data?.signature ?? nested?.signature ?? data) as `0x${string}` | undefined;
+  const account = (data?.account ?? nested?.account ?? data?.signer) as `0x${string}` | undefined;
+  if (!/^0x[0-9a-fA-F]{130}$/.test(String(sig ?? ""))) {
+    fail("payment", "wallet returned an invalid signature", {
+      statusUrl: request.statusUrl,
+    });
+  }
+  if (!account) {
+    fail("payment", "wallet signature did not include the payer account", {
+      statusUrl: request.statusUrl,
+    });
+  }
+  return { signature: sig as `0x${string}`, account, message: data?.message };
+}
+
+/** The server's CDP rejection reason rides on the 402 `payment-required` (v2). */
+function decodePaymentReason(submit: { res: Response; body: any }): string | undefined {
+  const h = submit.res.headers.get("payment-required");
+  if (h) {
+    try {
+      const pr = JSON.parse(Buffer.from(h, "base64").toString("utf-8"));
+      if (pr?.error) return pr.error;
+    } catch {
+      /* fall through */
+    }
+  }
+  return undefined;
 }
 
 async function cmdStatus(id: string): Promise<unknown> {
@@ -305,7 +383,8 @@ const HELP = `Usage: stupid-upload <command> [args]
 Commands:
   quote <path>                      Advisory pricing for a file
   upload <path> --temporary         Upload (free, <=1 MiB, 24h expiry)
-  upload <path> --permanent         Pay via x402 + upload (<=100 MiB)
+  upload <path> --permanent [--max-price-usd 0.20]
+                       Pay via x402 + upload (<=100 MiB; lower spend cap optional)
   status <id>                       Upload status
   delete <id> --token <token>       Delete (or STUPID_UPLOAD_DELETE_TOKEN)
   feedback --category <c> --message <m> [--rating 1-9]
@@ -333,7 +412,10 @@ async function main(): Promise<void> {
       const file = rest.find((a) => !a.startsWith("-"));
       if (!file) fail("usage", "upload needs a path");
       const ct = valueOf(rest, "--content-type") || undefined;
-      if (rest.includes("--permanent")) return emit(await cmdPermanentUpload(file, ct));
+      if (rest.includes("--permanent"))
+        return emit(
+          await cmdPermanentUpload(file, ct, valueOf(rest, "--max-price-usd") || undefined),
+        );
       if (rest.includes("--temporary")) return emit(await cmdTemporaryUpload(file, ct));
       return fail("usage", "choose --temporary or --permanent");
     }

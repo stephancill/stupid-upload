@@ -10,8 +10,8 @@ Delivered phases 1–8 and partial 6 of [handover.md](./handover.md): a
 Bun/TypeScript/Hono Worker running with pricing, temporary reservation/upload/
 download/HEAD/range, deletion, feedback, quotas, security headers, cleanup
 scheduler, discovery endpoints, dynamic x402 pricing, a full OpenAPI 3.1
-contract + `docs/api.md`, and a self-contained CLI + skill (txlink fallback +
-real x402 client signing), with a Vitest suite (54 tests).
+contract + `docs/api.md`, and a self-contained CLI + skill (txlink no-key submit + real x402 client signing),
+with a Vitest suite (63 tests).
 Deployed to production behind `https://upload.stupidtech.net` (D1 + R2
 provisioned, migrations applied, secrets set).
 
@@ -30,6 +30,18 @@ Completed in this pass (2026-09-02):
   Base USDC). A final live **settlement** (a real `$0.011`-class payment from a
   funded mainnet USDC account) is the one remaining Phase-9 acceptance item.
 - **Phase 10** — deployment/decision log updated (this file).
+- **No-key paid upload (submit seam).** The CLI now completes
+  `upload --permanent` without a private key: it drives `@x402/evm`'s
+  `ExactEvmScheme` with a capturing signer to mint the canonical Permit2
+  witness typed-data and a placeholder payload (`skills/stupid-upload/scripts/
+  submit-exact.ts`), asks a wallet to sign via txlink EIP-7871 `wallet_sign`,
+  splices the signature + payer `account` into the payload, and re-POSTs it as
+  the `PAYMENT-SIGNATURE` header so the CDP facilitator settles `exact`. It
+  fails closed on a payer-bound EIP-3009 route, on a quote above the
+  `--max-price-usd`/v1-maximum cap, and on a malformed wallet result. It emits
+  one `approvalRequired` JSON line to stderr (never stdout) with the wallet URL
+  and polls the txlink result up to `STUPID_UPLOAD_SIGN_TIMEOUT_MS`. Covered by
+  `test/submit-exact.test.ts` (4) and updated `test/cli.test.ts` (4).
 
 ## Decisions
 

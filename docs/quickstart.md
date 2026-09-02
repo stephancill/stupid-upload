@@ -55,6 +55,21 @@ settles it; then a reservation is created and the `201` response is returned.
 Idempotent recovery: retrying a settled request with the same key returns the
 existing reservation without charging again.
 
+### Via the CLI (no key)
+
+The packaged `stupid-upload` CLI settles paid uploads without your private
+key. Run `stupid-upload upload ./report.pdf --permanent`, approve the printed
+wallet URL, and the command submits the signed payment and uploads the file:
+
+```sh
+stupid-upload upload ./report.pdf --permanent --max-price-usd 0.05
+```
+
+`--max-price-usd` caps the amount and fails closed before any wallet prompt if
+the server's quote exceeds it (default cap is the v1 maximum). Machine output
+goes to stdout; a single `approvalRequired` JSON pointing at the wallet URL is
+written to stderr.
+
 ## Pricing
 
 `GET /v1/pricing?sizeBytes=<integer>` returns advisory pricing. The runtime
