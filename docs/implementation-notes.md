@@ -30,16 +30,20 @@ Completed in this pass (2026-09-02):
   Base USDC). A final live **settlement** (a real `$0.011`-class payment from a
   funded mainnet USDC account) is the one remaining Phase-9 acceptance item.
 - **Phase 10** — deployment/decision log updated (this file).
-- **Payment method: EIP-3009 **and** Permit2.** A live probe revealed the deployed
-  permanent route used the `exact` scheme's **EIP-3009** default
-  (`TransferWithAuthorization`), which embeds the payer `from` in the signed
-  message and therefore cannot be built by an address-free EIP-7871 `wallet_sign`
-  (the payer is only known after signing). `/v1/uploads/permanent` now advertises
-  **both** exact methods for the same route: EIP-3009 first (backwards-compatible
-  default preferred by keyed clients such as knox) and a Permit2 option
-  (`extra.assetTransferMethod: "permit2"`) so no-key clients sign the address-free
-  Permit2 witness. The no-key seam (`submit-exact.ts`) deterministically selects
-  the Permit2 option whenever it is offered.
+- **Payment method: EIP-3009 only, via txlink address substitution.** A live
+  probe showed the deployed permanent route used the `exact` scheme's
+  **EIP-3009** default (`transferWithAuthorization`), which embeds the payer
+  `from` in the signed message. An earlier permit2-only pivot unblocked no-key
+  signing but required a one-time `USDC.approve(Permit2, MAX)`, real payer
+  friction for a one-off agent. txlink's `wallet_sign` now supports **account
+  substitution**: any address field set to `0xaa…aa` (all `a`'s) is replaced
+  with the connected account's address before signing (EIP-7871, or
+  `eth_signTypedData_v4` fallback returning `{ signature, message, account }`).
+  `/v1/uploads/permanent` therefore advertises a **single EIP-3009** `exact`
+  method and the no-key seam (`submit-exact.ts`) builds the EIP-3009 payload
+  with the substitution sentinel as `from`, presents the typed-data to txlink,
+  then splices the returned signature + `account` as `PAYMENT-SIGNATURE`. No
+  Permit2 allowance is required; the keyed knox flow stays EIP-3009.
 - **No-key paid upload (submit seam).** The CLI now completes
   `upload --permanent` without a private key: it drives `@x402/evm`'s
   `ExactEvmScheme` with a capturing signer to mint the canonical Permit2

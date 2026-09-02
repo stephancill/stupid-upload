@@ -1,27 +1,35 @@
 // @ts-nocheck  (tool library; the CLI runs under bun)
 // No-key x402 "submit" seam for `upload --permanent`.
 //
-// When the CLI has no `STUPID_UPLOAD_PRIVATE_KEY`, it cannot sign the Permit2
-// witness itself. Instead it drives `@x402/evm`'s `ExactEvmScheme` with a
-// *capturing signer*: the scheme builds the full exact `PaymentPayload`
-// (including the Permit2 typed-data with the correct nonce/deadline/spender and
-// the PAYMENT-SIGNATURE-encoding shape). We hand that exact typed-data to a
-// wallet via txlink EIP-7871 `wallet_sign`, then substitute the wallet's real
-// 65-byte signature + payer `account` into the placeholder payload and re-POST
-// it as the `PAYMENT-SIGNATURE` header, turning it into a CDP `exact`
-// settlement the server already accepts.
+// The paid route uses the `exact` scheme's payer-bound EIP-3009
+// (`transferWithAuthorization`) transfer, which embeds `from` (the payer) in
+// the signed EIP-712 message and needs NO standing Permit2 allowance. When the
+// CLI has no `STUPID_UPLOAD_PRIVATE_KEY` it cannot sign itself, so it drives
+// `@x402/evm`'s `ExactEvmScheme` with a *capturing signer*:
 //
-// Nothing here ever reads, prints, or persists a private key. A rejected permit
-// moves no funds.
+//  1. The scheme builds the full `PaymentPayload` (authorization + typed-data)
+//     using the txlink substitution sentinel `0xaaaa...aaaa` as the payer.
+//  2. The CLI hands that exact typed-data to txlink `wallet_sign` (type 0x01).
+//     txlink replaces the all-`a` sentinel with the connected wallet's address
+//     and signs (EIP-7871, or `eth_signTypedData_v4` fallback), returning
+//     `{ signature, message, account }`.
+//  3. We substitute the real signature + payer `account` into the captured
+//     payload and re-POST it as `PAYMENT-SIGNATURE` so the facilitator settles
+//     the `exact` transfer.
+//
+// Nothing reads, prints, or persists a private key. A rejected transfer moves
+// no funds.
+//
+// The all-`a` sentinel is txlink's contract for account substitution (matching
+// the EIP-7871 "no fixed address" idea, implemented as an explicit replace).
 
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import { ExactEvmScheme } from "@x402/evm";
 
-/** Placeholder payer used while capturing. Permit2 witnesses are address-free, so
- *  the payer only rides in `permit2Authorization.from`, which we overwrite with the
- *  wallet's returned `account` after signing. */
-const PLACEHOLDER_ADDRESS = "0x0000000000000000000000000000000000000000";
-/** 65-byte (130 hex) placeholder signature; replaced before submission. */
+/** txlink substitute-any-address sentinel (40 `a`s). Replaced with the payer's
+ *  account by txlink before signing; the wallet's signature is then bound to `from`. */
+const SUBSTITUTE_ANY_ID = `0x${"a".repeat(40)}` as `0x${string}`;
+/** 65-byte placeholder signature (130 hex); replaced before submission. */
 const PLACEHOLDER_SIG = `0x${"00".repeat(65)}`;
 /** Documented v1 maximum (100 MiB = $0.208) plus a safe rounding ceiling. */
 export const DEFAULT_MAX_PRICE_USD = 0.2085;
@@ -29,18 +37,18 @@ export const DEFAULT_MAX_PRICE_USD = 0.2085;
 export interface CapturedExact {
   /** The built @x402 `PaymentPayload` (still carrying the placeholder sig). */
   payload: Record<string, unknown>;
-  /** The exact Permit2 witness typed-data a wallet must sign (EIP-712). */
+  /** The exact EIP-3009 typed-data a wallet must sign (with sentinel `from`). */
   typedData: Record<string, unknown>;
   /** The chosen `accepted` payment requirements (amount/network/asset). */
   accepted: Record<string, unknown>;
 }
 
 export interface WalletSignature {
-  /** The wallet's real 65-byte signature, e.g. from txlink. */
+  /** The wallet's real signature (from txlink). */
   signature: `0x${string}`;
-  /** The payer address the wallet substituted for `address`. */
+  /** The payer address txlink substituted for the sentinel. */
   account: `0x${string}`;
-  /** The typed-data that was signed (echoed back by the signer, if present). */
+  /** The typed-data that was signed (echoed back, when present). */
   message?: unknown;
 }
 
@@ -52,37 +60,32 @@ function toPlainJson(v: unknown): unknown {
 }
 
 /**
- * Builds the x402 `PaymentPayload` for the server's challenged route using a
- * capturing signer. The scheme derives the exact asset transfer method and
- * typed-data, records what it would sign (so the CLI can hand it to txlink),
- * and returns a placeholder signature. Nothing funds; no network read occurs.
+ * Builds the `PaymentPayload` for the challenged exact route via a capturing
+ * signer. The scheme derives the EIP-3009 typed-data (with the substitute
+ * sentinel as `from`), which the CLU hands to txlink; the `message.from` carries
+ * the sentinel so txlink replaces it. Nothing funds; no network read occurs.
  *
- * Fails closed if the route wants an EIP-3009 (payer-bound) payment, which
- * cannot be built without a known payer via `wallet_sign`.
+ * Fails closed on any non-EIP-3053 signed shape (should not happen for the
+ * single exact route, but keeps the seam safe against a misconfig).
  */
 export async function captureExact(paymentRequired: unknown): Promise<CapturedExact> {
   const base = (paymentRequired as { x402Version?: number } & Record<string, unknown>) ?? {};
-  // When the route advertises multiple exact payment methods, the no-key path
-  // must deterministically pick the address-free Permit2 option (the EIP-3009
-  // option is payer-bound and unsignable via wallet_sign). Fall back to all
-  // options only when no Permit2 one is offered.
-  const accepts = ((base.accepts as Array<Record<string, unknown>> | undefined) ?? []).map((a) =>
-    a && typeof a === "object" ? a : {},
-  );
-  const permitOptions = accepts.filter(
-    (a) => (a.extra as Record<string, unknown> | undefined)?.assetTransferMethod === "permit2",
-  );
-  const available = permitOptions.length > 0 ? permitOptions : accepts;
-  const pr = { x402Version: 2, ...base, accepts: available };
+  const pr = { x402Version: 2, ...base };
 
-  const networks = Array.from(new Set((available ?? []).map((a) => a.network as string)));
+  const networks = Array.from(
+    new Set(
+      ((pr.accepts as Array<Record<string, unknown>> | undefined) ?? []).map(
+        (a) => a.network as string,
+      ),
+    ),
+  );
   if (networks.length === 0) {
     throw new Error("the x402 challenge carried no accepted payment requirements");
   }
 
   const captured: Record<string, unknown> = {};
   const capturingSigner = {
-    address: PLACEHOLDER_ADDRESS as `0x${string}`,
+    address: SUBSTITUTE_ANY_ID,
     async signTypedData(typed: {
       domain: Record<string, unknown>;
       types: Record<string, unknown>;
@@ -100,20 +103,16 @@ export async function captureExact(paymentRequired: unknown): Promise<CapturedEx
   for (const network of networks) {
     client.register(network, new ExactEvmScheme(capturingSigner));
   }
-  // Relax @x402's default $1/default-asset-only controls: the CLI enforces the
-  // authoritative spend cap itself via `assertWithinPriceCap`. This keeps the
-  // seam decoupled from a hardcoded USDC asset table (Base mainnet vs Sepolia).
+  // Relax @x4default $1/default-asset controls: the CLI enforces the
+  // authoritative spend cap itself via `assertWithinPriceCap`.
   client.setSpendControls({ allowedAssets: true, maxAmountPerPayment: false });
 
   const payload = (await client.createPaymentPayload(pr)) as Record<string, unknown>;
 
-  if (
-    captured.primaryType !== "PermitWitnessTransferFrom" ||
-    (captured.domain as { name?: string } | undefined)?.name !== "Permit2"
-  ) {
+  if (captured.primaryType !== "TransferWithAuthorization") {
     throw new Error(
       `unsupported x402 payment shape (${String(captured.primaryType)}); ` +
-        "the no-key path requires an address-free Permit2 witness",
+        "the no-key path requires an EIP-3009 transferWithAuthorization",
     );
   }
 
@@ -125,8 +124,8 @@ export async function captureExact(paymentRequired: unknown): Promise<CapturedEx
 }
 
 /**
- * The CLI's authoritative spend cap check (independent of x402's USD heuristics):
- * fails if the quoted atomic USDC `accepted.amount` exceeds `maxUsd`.
+ * The CLI's authoritative spend cap check: fails if the quoted atomic USDC
+ * `accepted.amount` exceeds `maxUsd`.
  */
 export function assertWithinPriceCap(accepted: Record<string, unknown>, maxUsd: number): void {
   const raw = accepted.amount;
@@ -143,7 +142,9 @@ export function assertWithinPriceCap(accepted: Record<string, unknown>, maxUsd: 
 /**
  * Splices the wallet's real signature + payer address into a captured payload,
  * producing the final object to encode as `PAYMENT-SIGNATURE`. Returns a deep
- * copy; the captured payload is left untouched.
+ * copy; the captured payload is left untouched. A `from` matching the substitute
+ * sentinel is replaced with the returned `account` (txlink signs the real one in
+ * the message, so the payload `from` must match).
  */
 export function applyWalletSignature(
   payload: Record<string, unknown>,
@@ -152,9 +153,10 @@ export function applyWalletSignature(
   const out = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
   const inner = (out.payload ?? {}) as Record<string, unknown>;
   inner.signature = sig.signature;
-  const auth = inner.permit2Authorization as { from?: unknown; [k: string]: unknown } | undefined;
+  const auth = inner.authorization as { from?: unknown; [k: string]: unknown } | undefined;
   if (auth && typeof auth === "object") {
-    auth.from = sig.account;
+    auth.from =
+      String(auth.from).toLowerCase() === SUBSTITUTE_ANY_ID.toLowerCase() ? sig.account : auth.from;
   }
   return out;
 }

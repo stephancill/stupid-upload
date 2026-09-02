@@ -89,16 +89,13 @@ describe("POST /v1/uploads/permanent (payment)", () => {
     const header = res.headers.get("payment-required");
     expect(header).toBeTruthy();
     const decoded = JSON.parse(Buffer.from(header!, "base64").toString("utf-8"));
-    // The route advertises both exact methods: EIP-3009 (default, first) and
-    // Permit2 (address-free, for the no-key path).
-    expect(decoded.accepts).toHaveLength(2);
-    const eip3009 = decoded.accepts[0];
-    const permit2 = decoded.accepts[1];
-    expect(eip3009.scheme).toBe("exact");
-    expect(eip3009.network).toBe("eip155:84532");
-    expect(permit2.extra.assetTransferMethod).toBe("permit2");
-    // 1 MiB → $0.01 → 10000 atomic USDC (both options price identically).
-    expect(eip3009.amount).toBe("10000");
-    expect(permit2.amount).toBe("10000");
+    // Single EIP-3009 exact method (payer-bound; the no-key path signs it via
+    // txlink wallet_sign with account substitution).
+    const accept = decoded.accepts?.[0];
+    expect(decoded.accepts).toHaveLength(1);
+    expect(accept.scheme).toBe("exact");
+    expect(accept.network).toBe("eip155:84532");
+    // 1 MiB → $0.01 → 10000 atomic USDC.
+    expect(accept.amount).toBe("10000");
   });
 });

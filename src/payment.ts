@@ -123,29 +123,17 @@ export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler
 
   const routes = {
     "POST /v1/uploads/permanent": {
-      // Advertise BOTH exact payment methods for the same route so every client
-      // type works:
-      //  1. EIP-3009 (payer-bound) — the default, preferred by keyed clients
-      //     such as knox (`@x402/fetch`) that know their `from` up front.
-      //  2. Permit2 (address-free) — enables the no-key EIP-7871 wallet flow,
-      //     whose signed witness carries no payer address.
-      // Both settle `exact` through the configured facilitator; the price is
-      // dynamic on `sizeBytes` and shared by both options.
-      accepts: [
-        {
-          scheme: "exact",
-          network: network as `${string}:${string}`,
-          payTo,
-          price: dynamicPrice,
-        },
-        {
-          scheme: "exact",
-          network: network as `${string}:${string}`,
-          payTo,
-          extra: { assetTransferMethod: "permit2" },
-          price: dynamicPrice,
-        },
-      ],
+      // Single payer-bound EIP-3009 `exact` payment (transferWithAuthorization),
+      // which needs no standing Permit2 allowance. The no-key path signs it via
+      // txlink `wallet_sign` (type 0x01): txlink substitutes the connected wallet
+      // for the all-`a` address placeholder and falls back to
+      // `eth_signTypedData_v4` when the wallet lacks EIP-7871.
+      accepts: {
+        scheme: "exact",
+        network: network as `${string}:${string}`,
+        payTo,
+        price: dynamicPrice,
+      },
       description: "Stores a file with no scheduled expiration, once paid.",
       mimeType: "application/json",
     },
