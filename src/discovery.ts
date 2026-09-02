@@ -574,7 +574,6 @@ const x402WellKnown = {
 export function registerDiscovery(): void {
   app.get("/", (c) => {
     const body = `<h1>stupid upload</h1>
-<p><strong>One-command file uploads.</strong></p>
 <p>An agent-friendly interface for free temporary uploads and paid long-term uploads.</p>
 <h2>Upload a file</h2>
 <p>Browser uploads are free up to 1 MiB and expire after 24 hours.</p>
@@ -582,11 +581,11 @@ export function registerDiscovery(): void {
 <p id="upload-status" role="status" aria-live="polite"></p>
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
 <h2>From an agent</h2>
-<pre><code>npx --yes stupid-upload@0.0.2 upload ./file</code></pre>
+<pre><code>npx --yes stupid-upload upload ./file</code></pre>
 <p><a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">Agent skill</a></p>
 <h2>Long-term from an agent</h2>
 <p>Paid with Base USDC via x402. Up to 100 MiB, with no scheduled expiration.</p>
-<pre><code>npx --yes stupid-upload@0.0.2 upload ./file --permanent</code></pre>
+<pre><code>npx --yes stupid-upload upload ./file --permanent</code></pre>
 <p><a href="https://www.npmjs.com/package/stupid-upload">npm</a> &middot; <a href="/docs">API docs</a> &middot; <a href="https://github.com/stephancill/stupid-upload">source</a></p>
 <script type="module">
 const form = document.querySelector("#upload-form");
