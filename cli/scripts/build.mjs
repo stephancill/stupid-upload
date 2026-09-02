@@ -12,7 +12,7 @@ await build({
   outfile: path.resolve(root, "../dist/stupid-upload.mjs"),
   bundle: true,
   platform: "node",
-  target: "node18",
+  target: "node22",
   format: "esm",
   external: [
     "@x402/core",

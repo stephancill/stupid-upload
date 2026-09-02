@@ -111,7 +111,8 @@ If D1 finalization fails after R2 succeeded, the object is compensated
 Same metadata body as temporary. `sizeBytes <= 100 MiB`.
 
 1. An unpaid request returns **`402`** with an exact Base USDC amount in the
-   `PAYMENT-REQUIRED` header, computed from `sizeBytes`.
+   `PAYMENT-REQUIRED` header, computed from `sizeBytes`. Its
+   `maxTimeoutSeconds` is 3600, producing a one-hour EIP-3009 authorization.
 2. The client pays (x402) and the facilitator settles it.
 3. After settled, a reservation is created and the **`201`** is returned with
    `expiresAt: null`, the exact settled price, and payment network.
@@ -122,8 +123,8 @@ existing funded reservation without charging again.
 An expired, unused paid slot is not automatically refunded in v1. Payment
 purchases the slot.
 
-The permanent tier is disabled (`501`) until production x402 enablement.
-See `docs/operations.md`.
+The production permanent tier is enabled on Base mainnet. See
+`docs/operations.md`.
 
 ## Status
 

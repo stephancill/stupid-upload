@@ -10,9 +10,11 @@
 // as PAYMENT-SIGNATURE to settle. The whole no-key flow completes end-to-end in
 // one command.
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { readFile, writeFile, rename, access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import packageJson from "../package.json" with { type: "json" };
 import {
   createTxlinkRequest,
   pollTxlinkRequest,
@@ -462,7 +464,7 @@ const HELP = `Usage: stupid-upload <command> [args]
 
 Commands:
   quote <path>                      Advisory pricing for a file
-  upload <path> --temporary         Upload (free, <=1 MiB, 24h expiry)
+  upload <path>                     Upload (free, <=1 MiB, 24h expiry; default)
   upload <path> --permanent [--max-price-usd 0.20]
                        Pay via x402 + upload (<=100 MiB; lower spend cap optional)
   status <id>                       Upload status
@@ -484,7 +486,9 @@ async function main(): Promise<void> {
     process.stdout.write(HELP);
     return;
   }
-  if (cmd === "--version") return emit({ ok: true, name: "stupid-upload", version: "0.7.0" });
+  if (cmd === "--version") {
+    return emit({ ok: true, name: packageJson.name, version: packageJson.version });
+  }
 
   switch (cmd) {
     case "quote":
@@ -497,8 +501,7 @@ async function main(): Promise<void> {
         return emit(
           await cmdPermanentUpload(file, ct, valueOf(rest, "--max-price-usd") || undefined),
         );
-      if (rest.includes("--temporary")) return emit(await cmdTemporaryUpload(file, ct));
-      return fail("usage", "choose --temporary or --permanent");
+      return emit(await cmdTemporaryUpload(file, ct));
     }
     case "status":
       return emit(await cmdStatus(rest[0]));
@@ -547,7 +550,8 @@ async function cmdDownload(url: string, output: string, force: boolean): Promise
   return { ok: true, command: "download", wrote: output, bytes: buf.byteLength };
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 
 if (isMain) {
   main().catch((e) => {

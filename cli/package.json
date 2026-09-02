@@ -1,6 +1,6 @@
 {
   "name": "stupid-upload",
-  "version": "0.7.0",
+  "version": "0.0.2",
   "description": "CLI for the Stupid Upload service: quote, upload (temp/free or permanent/x402 paid), status, list, download, delete, and feedback. Node.",
   "keywords": [
     "agent",
@@ -10,18 +10,29 @@
     "upload",
     "x402"
   ],
+  "homepage": "https://upload.stupidtech.net",
+  "bugs": "https://github.com/stephancill/stupid-upload/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stephancill/stupid-upload.git",
+    "directory": "cli"
+  },
   "bin": {
-    "stupid-upload": "./dist/stupid-upload.mjs"
+    "stupid-upload": "dist/stupid-upload.mjs"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@x402/core": "^2.24.0",
@@ -30,9 +41,9 @@
     "viem": "^2.0.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

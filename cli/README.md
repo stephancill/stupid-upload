@@ -10,16 +10,16 @@ agent-first public file upload service on Cloudflare.
 ## Install
 
 ```sh
-npm i -g stupid-upload
+npm i -g stupid-upload@0.0.2
 # or use without installing:
-npx stupid-upload --help
+npx --yes stupid-upload@0.0.2 --help
 ```
 
 ## Usage
 
 ```sh
 stupid-upload quote ./report.pdf
-stupid-upload upload ./report.pdf --temporary
+stupid-upload upload ./report.pdf              # temporary is the default
 stupid-upload upload ./report.pdf --permanent [--max-price-usd 0.05]
 stupid-upload list                # locally-recorded uploads
 stupid-upload status <id>
@@ -31,6 +31,7 @@ stupid-upload feedback --category <c> --message <m> [--rating 1-5]
 - Stable JSON on stdout; structured errors on stderr; documented exit codes.
 - `upload --permanent` without `STUPID_UPLOAD_PRIVATE_KEY` asks a wallet to sign
   via txlink (EIP-3009, account substitution) and settles automatically.
+- EIP-3009 payment authorizations expire one hour after creation.
 - Successful uploads are recorded in `~/.stupid-upload/uploads.json` (mode 0600) so `list` / `delete <id>` work without re-supplying tokens.
 
 ## Environment

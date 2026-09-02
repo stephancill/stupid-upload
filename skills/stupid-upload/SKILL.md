@@ -20,34 +20,41 @@ are paid with Base USDC via x402.
 - For product feedback → **feedback** (`--category`, `--message`, optional
   `--rating`). Never echo secrets into the message.
 
-## Requisites
+## Prerequisite
 
-This skill uses the **`stupid-upload` npm CLI**. Ensure it is installed before
-invoking it (or rely on an agent runtime that provides it):
+Require Node.js 22+ and the pinned **`stupid-upload@0.0.2` npm CLI**. Before
+using this skill, verify the installed version and install it globally when it
+is missing or different:
 
 ```sh
-npm i -g stupid-upload     # or: npx stupid-upload ...
+if ! stupid-upload --version 2>/dev/null | grep -q '"version":"0.0.2"'; then
+  npm install --global stupid-upload@0.0.2
+fi
+stupid-upload --version
 ```
+
+Fail loudly if Node, npm, installation, or version verification fails. Do not
+invoke repository-local scripts or substitute an unpinned `npx` command.
 
 The CLI is a single Node binary; it records your uploads in
 `~/.stupid-upload/uploads.json` so you can `list` and `delete <id>` without
-digging for tokens. The raw HTTP contract lives in `references/api.md` if you
-need to call the API directly.
+digging for tokens. `references/api.md` documents the service contract and
+limits used by the CLI.
 
 ## Flow
 
-Use the CLI (or the raw HTTP API in `references/api.md`). For example:
+Use the installed CLI. For example:
 
 ```sh
 stupid-upload quote ./report.pdf
-stupid-upload upload ./report.pdf --temporary
+stupid-upload upload ./report.pdf
 stupid-upload upload ./report.pdf --permanent
 ```
 
 ## Paid uploads
 
 `upload --permanent` first fetches an exact x402 `402` challenge for the
-file's size.
+file's size. Its EIP-3009 authorization expires one hour after creation.
 
 - If `STUPID_UPLOAD_PRIVATE_KEY` is set, the CLI signs and pays locally.
 - Without a key, the CLI drives the EIP-3009 payment through a capturing

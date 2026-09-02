@@ -16,8 +16,8 @@
     "lint": "oxlint src test cli",
     "format": "oxfmt src test cli",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "bun run build:cli && vitest run",
+    "test:watch": "bun run build:cli && vitest",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

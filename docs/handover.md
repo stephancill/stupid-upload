@@ -228,27 +228,31 @@ Repository documentation responsibilities:
 
 ## Agent Skill and CLI
 
-Create a repository-local skill at `skills/stupid-upload/`. It must be self-contained so the directory can be installed as an agent skill without relying on source files elsewhere in the repository.
+Create a repository-local skill at `skills/stupid-upload/`. Keep executable code
+out of the skill: it requires the separately published, pinned npm CLI.
 
 ### Skill Structure
 
 - `SKILL.md` has only `name` and a comprehensive trigger-oriented `description` in YAML frontmatter. Its concise imperative body tells agents when to quote, choose temporary versus permanent retention, upload, download, delete, and send feedback.
 - `references/api.md` contains the compact API/limits/error details needed during operation. Generate it from or validate it against `/openapi.json` rather than maintaining an unrelated hand-written contract.
-- `scripts/stupid-upload.ts` is the deterministic CLI entry point used by the skill.
-- `package.json` contains only the runtime dependencies and scripts needed to execute and test the CLI. Use Bun and a `#!/usr/bin/env bun` shebang.
+- Do not bundle scripts or a package manifest in the skill. Require Node.js 22+
+  and install the exact documented `stupid-upload` npm version globally before
+  operation.
 - Do not add a skill-local README, changelog, installation guide, or duplicate prose that belongs in `SKILL.md`, `references/api.md`, or repository `docs/`.
 
 The skill description should trigger for requests to upload or share a local file, create an expiring or permanent public URL, quote upload storage, inspect/download/delete a Stupid Upload file, or submit product feedback.
 
 ### CLI Contract
 
-Expose the executable as `stupid-upload`. The repository root package may point its `bin` entry to `skills/stupid-upload/scripts/stupid-upload.ts`, but the script must also work directly from the packaged skill.
+Maintain the Node CLI as the independent npm package under `cli/` and expose its
+executable as `stupid-upload`. The package version is the source of truth for
+`stupid-upload --version`.
 
 Commands:
 
 ```text
 stupid-upload quote <path>
-stupid-upload upload <path> --temporary
+stupid-upload upload <path> [--temporary]
 stupid-upload upload <path> --permanent
 stupid-upload status <id>
 stupid-upload head <url-or-id>
@@ -264,7 +268,11 @@ CLI behavior:
 - Exit `0` only on success and use documented nonzero exit codes for validation, quota, payment, network, integrity, and server errors.
 - For upload commands, inspect the file, determine or accept `--content-type`, compute SHA-256 locally, create a cryptographically random idempotency key, reserve the slot, stream the bytes, and output the final public URL, deletion token, size, hash, retention, expiry, and payment receipt.
 - Temporary upload needs no credentials and must fail before reservation if the file exceeds 1 MiB.
+- Temporary retention is the default when `upload` has no retention flag;
+  `--temporary` remains an explicit equivalent.
 - Permanent upload obtains the x402 challenge and pays/retries automatically with the official x402 client and viem. Read the payer key only from `STUPID_UPLOAD_PRIVATE_KEY`; never accept it as a command-line flag, print it, persist it, or include it in errors.
+- Set permanent payment `maxTimeoutSeconds` to 3600 so the official x402 client
+  creates EIP-3009 authorizations that expire one hour after creation.
 - Before paying, print nothing interactive in default JSON mode. Enforce a default maximum authorized amount equal to the documented v1 maximum and support `--max-price-usd` so agents can set a lower spending cap. Fail closed if the challenge network, token, recipient, or amount differs from the quote/runtime expectations.
 - Honor `Idempotency-Key` recovery so a network failure after settlement does not cause another payment.
 - `download` writes atomically through a temporary file, verifies advertised length/hash when available, and does not overwrite unless `--force` is supplied.
@@ -277,8 +285,11 @@ CLI behavior:
 - Initialize the skill using the skill-creator tooling, remove generated examples that are not needed, and keep `SKILL.md` below 500 lines.
 - Validate and package it with the skill-creator `quick_validate.py` and `package_skill.py` workflows. Produce a `stupid-upload.skill` artifact for installation testing without committing generated artifacts unless repository policy explicitly calls for it.
 - Test the CLI parser, JSON output, exit codes, hash/size calculation, spending cap, unexpected x402 terms, idempotent retry, temporary upload, testnet permanent upload, download integrity, deletion, and feedback.
-- Install the packaged skill into a clean temporary agent environment and run one end-to-end temporary workflow plus a Base Sepolia paid workflow.
-- Keep CLI/API schemas aligned by importing generated types from the checked-in OpenAPI schema when practical, or by contract tests against a local Worker when cross-package imports would make the skill non-self-contained.
+- Install the npm CLI and packaged skill into a clean temporary agent
+  environment and run one end-to-end temporary workflow plus a Base Sepolia
+  paid workflow.
+- Keep CLI/API schemas aligned by importing generated types from the checked-in
+  OpenAPI schema when practical, or by contract tests against a local Worker.
 
 ## Data Model
 
@@ -333,7 +344,9 @@ Index upload status/expiration for scheduled cleanup. Keep expired/deleted tombs
 3. Implement temporary reservation, authenticated streaming upload with SHA-256 enforcement, status, download/HEAD/range behavior, deletion, feedback collection, and cleanup cron.
 4. Integrate x402 dynamic pricing on Base Sepolia, persist available receipt metadata, and test unpaid and paid permanent reservations.
 5. Add OpenAPI, `llms.txt`, `.well-known/x402`, Bazaar discovery metadata, hosted/repository documentation, and tested curl recipes.
-6. Build the self-contained `skills/stupid-upload` skill and CLI, validate/package the skill, and run CLI contract tests against the local Worker and Base Sepolia.
+6. Build and publish the Node CLI package, build the npm-dependent
+   `skills/stupid-upload` skill, validate/package the skill, and run CLI
+   contract tests against the local Worker and Base Sepolia.
 7. Run oxfmt, oxlint, TypeScript checks, unit/integration tests, local Wrangler smoke tests, and documentation example checks.
 8. Provision production R2/D1/rate-limit bindings and secrets, configure lifecycle/CORS/domains, deploy, and test temporary expiry behavior.
 9. Switch x402 to Base mainnet, execute one real $0.01 payment through the CLI, upload/download/delete a file, verify settlement, and confirm Bazaar indexing.
@@ -362,7 +375,9 @@ Index upload status/expiration for scheduled cleanup. Keep expired/deleted tombs
 - Source and global free quotas fail closed under concurrent reservation tests.
 - Active user content cannot execute in the API/site origin and is served with safe headers.
 - An unauthenticated agent can submit bounded product feedback, while spam controls and private storage prevent the endpoint from exposing feedback or becoming an unbounded write path.
-- An agent can install `skills/stupid-upload`, invoke its bundled CLI without manually constructing HTTP or x402 headers, and complete quote/upload/status/download/delete/feedback workflows using machine-readable output.
+- An agent can install `skills/stupid-upload`, obtain its pinned npm CLI, and
+  complete quote/upload/status/download/delete/feedback workflows using
+  machine-readable output without manually constructing HTTP or x402 headers.
 - First-party hosted and repository documentation covers both direct API usage and the CLI, with examples verified against the deployed contract.
 - Formatting, linting, type checking, tests, local smoke tests, one testnet payment, and one production $0.01 payment all pass.
 
@@ -373,89 +388,12 @@ Index upload status/expiration for scheduled cleanup. Keep expired/deleted tombs
 - Files over 100 MiB and direct presigned/multipart upload flows.
 - Automated malware scanning and content classification. Launch instead with attachment handling, takedown tooling, quotas, and explicit acceptable-use terms.
 
-## Follow-up: no-key `upload --permanent` submit (handed off)
+## Follow-up: no-key `upload --permanent` submit (completed)
 
-**Status (2026-09-02):** the live paid tier works end-to-end on Base mainnet via
-a keyed payer (knox / `@x402/fetch`): a real $0.01 settlement, then upload →
-download → delete, was verified in production. What is **not** done is the
-**no-key** `upload --permanent` path actually settling — the CLI can now sign
-the correct message and receive a real EIP-7871 signature + payer `account`
-back from txlink, but it cannot yet turn that signature into a CDP `exact`
-settlement. Hand to an engineer to build the "submit" seam.
-
-### Background facts (verified)
-
-- The `exact` payment is a Permit2-`witness` transfer, **not** a plain permit.
-  In `@x402/evm` the signed type is `PermitWitnessTransferFrom` over the
-  `PERMIT2` domain:
-  - `PermitWitnessTransferFrom = [ permitted(TokenPermissions), spender(address),
-    nonce(uint256), deadline(uint256), witness(Witness) ]`
-  - `TokenPermissions = [ token(address), amount(uint256) ]`,
-    `Witness = [ to(address), validAfter(uint256) ]`
-  - `message = { permitted:{token, amount}, spender, nonce, deadline,
-    witness:{ to: payTo, validAfter } }`
-  - `domain = { name: "PERMIT2", chainId, verifyingContract }`
-    (`PERMIT2_ADDRESS = 0x000000000022D47F00301126dDE24F6a78BA3`; the `spender`
-    is the x402 exact proxy on Base).
-  - Chain base mainnet `eip155:8453`.
-- No payer address is in the signed message, so EIP-7871 `wallet_sign`
-  (`request.type: "0x01"`, omit `address`) lets txlink substitute the connected
-  wallet — this already works, and txlink returns `{ result: { signature,
-  message, account } }`.
-- The server reads the solved payment from a **`PAYMENT-SIGNATURE`** header
-  (JSON → base64), decoded via `decodePaymentSignatureHeader` in `@x402/core`.
-  The final payment is a v2 `PaymentPayload` object (`x402Version: 2` +
-  `payload` + `accepted`).
-- The CLI currently builds `permit2TypedData(...)` in
-  `skills/stupid-upload/scripts/stupid-upload.ts` (already the correct
-  witness struct) and submits the wallet-sign via txlink — but it does **not**
-  construct/submit the `PaymentPayload`.
-- Live knox settlement already proves the server + CDP facilitator accept the
-  canonical `exact` payment.
-
-### The approach (the seam)
-
-1. `@x402/evm`'s `ExactEvmScheme` builds **and signs** the permit in one
-   `createPayment(...)` call. To external-sign without a private key, pass a
-   **capturing signer** `{ address, publicClient, signTypedData(td) }` that
-   returns a unique 65-byte placeholder and records `td` (the exact typed-data,
-   incl. nonce/deadline/spender). Call
-   `x402Client().register("eip155:8453", scheme).createPayment(<decoded
-   paymentRequired>)`.
-2. Present the captured typed-data to the wallet via EIP-7871 `wallet_sign`;
-   txlink returns the real 65-byte `signature` + `account`.
-3. Substitute the placeholder signature with the real one inside
-   `payload` (JSON replace), attach `accepted` (the chosen requirement), encode
-   the payment to the `PAYMENT-SIGNATURE` header (base64 JSON), and re-POST the
-   original `/v1/uploads/permanent` body + the same `Idempotency-Key`.
-4. A `201` returns the reservation; then `PUT` content / download / delete as
-   usual. A `402` means CDP rejected — read the reason: instrumentation
-   (`instrumentFacilitator` in `src/payment.ts`) logs a short reason on
-   rejection; otherwise `wrangler tail` + a knox retry shows CDP's exact error.
-
-### Caveats / validation
-
-- The `payload`/`spender` above only pin the shape; the exact `PaymentPayload`
-  fields (`accepted`) are scheme-derived, so test against the live CDP and
-  iterate (a rejected permit is safe — no funds move). Use the authenticated
-  `wrangler tail` instrumentation to read the CDP error.
-- The payer (account that signs) must hold ≥ ~$0.01 Base USDC; the recipient is
-  `STUPID_UPLOAD_PAYMENT_ADDRESS` (set in prod).
-- Do **not** hand-write the payload; drive it from the `@x402` stack so
-  nonce/spender/domain derive exactly.
-- After it works, add a contract/unit test (stubbed facilitator) mirroring the
-  `402 → submit` flow (see `test/payment.test.ts`).
-
-### Files to touch
-
-- `skills/stupid-upload/scripts/stupid-upload.ts` — the no-key `--permanent`
-  branch: after the wallet signature, call the submit seam instead of returning
-  `awaitingSignature`.
-- new `skills/stupid-upload/scripts/submit-exact.ts` — capture signer,
-  placeholder→signature substitution, `PAYMENT-SIGNATURE` encode + re-POST.
-- `skills/stupid-upload/references/api.md` + `docs/cli.md` — document the no-key
-  submit + EIP-7871 signing flow.
-- `docs/quickstart.md` — CLI paid example.
-
-Run `bun run format && bun run lint && bun run typecheck && bun run test` before
-committing; update `docs/implementation-notes.md`.
+**Status (2026-09-02):** the live paid tier works end-to-end on Base mainnet.
+The no-key CLI path in `cli/src/submit-exact.ts` now drives the official
+`@x402/evm` EIP-3009 payment builder with an account-substitution sentinel,
+asks txlink to sign the generated typed data, inserts the returned payer and
+signature into the payment payload, and submits `PAYMENT-SIGNATURE` for
+settlement. It enforces the configured price cap and fails closed on malformed
+wallet results or unsupported payment shapes.

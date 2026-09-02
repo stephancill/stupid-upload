@@ -21,7 +21,7 @@ const paymentRequired = Buffer.from(
         amount: "10000",
         asset: "0x0000000000000000000000000000000000000001",
         payTo: "0x0123456789abcdef0123456789abcdef01234567",
-        maxTimeoutSeconds: 300,
+        maxTimeoutSeconds: 3600,
         extra: { name: "USD Coin", version: "2" },
       },
     ],

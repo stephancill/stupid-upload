@@ -133,6 +133,7 @@ export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler
         network: network as `${string}:${string}`,
         payTo,
         price: dynamicPrice,
+        maxTimeoutSeconds: 60 * 60,
       },
       description: "Stores a file with no scheduled expiration, once paid.",
       mimeType: "application/json",

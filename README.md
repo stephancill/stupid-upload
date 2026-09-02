@@ -16,9 +16,11 @@ availability — never a literal eternal-storage promise).
 
 ```text
 src/                  Hono Worker (app, routes, pricing, quota, security, ...)
+cli/                  Node CLI package published to npm
 migrations/           D1 schema
 test/                 Vitest suite
 docs/                 handover, api, implementation notes, quickstart, ...
+skills/stupid-upload/  Agent instructions and compact API reference
 AGENTS.md             agent rules
 wrangler.jsonc        Worker bindings (R2, D1, rate limit)
 ```
@@ -48,13 +50,13 @@ bun install
 
 ## CLI & agent skill
 
-A Node CLI is published on npm as `stupid-upload` (source in `cli/`) and a
-self-contained agent skill ships under `skills/stupid-upload`:
+A Node CLI is published on npm as `stupid-upload` (source in `cli/`). The agent
+skill under `skills/stupid-upload` requires the pinned npm package:
 
 ```sh
-npm i -g stupid-upload
+npm i -g stupid-upload@0.0.2
 stupid-upload quote ./file
-stupid-upload upload ./file --temporary
+stupid-upload upload ./file
 ```
 
 See `docs/cli.md` and the skill's `SKILL.md`/`references/api.md`. The paid

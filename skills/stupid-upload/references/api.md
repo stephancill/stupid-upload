@@ -28,6 +28,8 @@ Advertised machine contract: `/openapi.json`. Use the CLI for the paid path.
   `Idempotency-Key`). Body `{ filename, contentType, sizeBytes, sha256 }`.
 - `POST /v1/uploads/permanent` — paid. Once production enables it, an unpaid
   request returns `402` + `PAYMENT-REQUIRED`; the exact challenge is Base USDC.
+  `maxTimeoutSeconds` is 3600, so its EIP-3009 authorization expires after one
+  hour.
   A retry with the same Idempotency-Key returns the existing (funded)
   reservation without charging again. A solved payment is returned as the
   `PAYMENT-SIGNATURE` header (base64 JSON `PaymentPayload`).
@@ -53,8 +55,9 @@ route. Repeats return the existing reservation without consuming quota.
 
 ## CLI
 
-The CLI is the `stupid-upload` npm package (`npm i -g stupid-upload`). It emits
-stable JSON. The paid path without a key builds the exact EIP-3009 payment via
+The CLI is the pinned `stupid-upload@0.0.2` npm package
+(`npm i -g stupid-upload@0.0.2`). It emits stable JSON. The paid path without a
+key builds the exact EIP-3009 payment via
 the `@x402/evm` scheme, asks the wallet to sign via txlink `wallet_sign`
 (type `0x01`, account substitution), then submits the replaced signature +
 payer as `PAYMENT-SIGNATURE`. Set `STUPID_UPLOAD_PRIVATE_KEY` to sign + settle

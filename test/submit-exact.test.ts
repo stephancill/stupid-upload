@@ -20,7 +20,7 @@ const paymentRequired = {
       amount: "10000",
       asset: "0x0000000000000000000000000000000000000001",
       payTo: "0x0123456789abcdef0123456789abcdef01234567",
-      maxTimeoutSeconds: 300,
+      maxTimeoutSeconds: 3600,
       extra: { name: "USD Coin", version: "2" },
     },
   ],
@@ -28,7 +28,9 @@ const paymentRequired = {
 
 describe("submit-exact seam", () => {
   it("captures an EIP-3009 transfer (with substitute sentinel) and placeholder payload", async () => {
+    const before = Math.floor(Date.now() / 1000);
     const { payload, typedData, accepted } = await captureExact(paymentRequired);
+    const after = Math.floor(Date.now() / 1000);
     expect(accepted.network).toBe("eip155:84532");
     expect(accepted.amount).toBe("10000");
     // The scheme must ask the wallet to sign a transferWithAuthorization.
@@ -38,6 +40,8 @@ describe("submit-exact seam", () => {
     const auth = (payload.payload as any).authorization;
     expect(String(auth.from).toLowerCase()).toBe(sentinel);
     expect(String(auth.to).toLowerCase()).toBe(paymentRequired.accepts[0]!.payTo.toLowerCase());
+    expect(Number(auth.validBefore)).toBeGreaterThanOrEqual(before + 3600);
+    expect(Number(auth.validBefore)).toBeLessThanOrEqual(after + 3600);
   });
 
   it("splices the wallet signature + payer and encodes PAYMENT-SIGNATURE", async () => {

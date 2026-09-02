@@ -95,6 +95,7 @@ describe("POST /v1/uploads/permanent (payment)", () => {
     expect(decoded.accepts).toHaveLength(1);
     expect(accept.scheme).toBe("exact");
     expect(accept.network).toBe("eip155:84532");
+    expect(accept.maxTimeoutSeconds).toBe(3600);
     // 1 MiB → $0.01 → 10000 atomic USDC.
     expect(accept.amount).toBe("10000");
   });

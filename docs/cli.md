@@ -1,7 +1,7 @@
 # Stupid Upload — CLI
 
 The `stupid-upload` CLI is a deterministic JSON tool published to npm as the
-`stupid-upload` package (Node ≥18) and also lives at `cli/` in this repository.
+`stupid-upload` package (Node ≥22) and also lives at `cli/` in this repository.
 It emits stable JSON to stdout; structured errors go to stderr with a
 documented exit code, so agents can parse output without scraping prose.
 
@@ -10,10 +10,10 @@ documented exit code, so agents can parse output without scraping prose.
 From npm (recommended):
 
 ```sh
-npm i -g stupid-upload
+npm i -g stupid-upload@0.0.2
 stupid-upload <command>
 # or, without installing:
-npx stupid-upload <command>
+npx --yes stupid-upload@0.0.2 <command>
 ```
 
 From the repository:
@@ -43,7 +43,7 @@ node ./dist/stupid-upload.mjs <command>
 
 ```text
 stupid-upload quote <path>
-stupid-upload upload <path> --temporary
+stupid-upload upload <path> [--temporary]
 stupid-upload upload <path> --permanent [--max-price-usd <n>]
 stupid-upload status <id>
 stupid-upload list
@@ -72,6 +72,10 @@ rotate by deleting the file (you'll lose the convenience of token-less deletes).
 fails closed before any wallet is invoked if the server's x402 amount exceeds
 the cap. Default cap is the v1 maximum ($0.2085).
 
+`upload <path>` defaults to temporary retention; `--temporary` remains an
+explicit equivalent. EIP-3009 authorizations for permanent uploads expire one
+hour after creation (`maxTimeoutSeconds: 3600`).
+
 ## Output
 
 - Exit `0` only on success. Nonzero: `1` usage, `2` validation, `3` quota,
@@ -98,7 +102,7 @@ the cap. Default cap is the v1 maximum ($0.2085).
 
 ```sh
 stupid-upload quote ./report.pdf
-stupid-upload upload ./report.pdf --temporary
+stupid-upload upload ./report.pdf
 stupid-upload upload ./report.pdf --permanent   # prints a wallet url, then settles
 stupid-upload upload ./media/video.mp4 --permanent --max-price-usd 0.05
 stupid-upload status p_8A...

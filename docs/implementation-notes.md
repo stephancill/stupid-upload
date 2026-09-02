@@ -10,8 +10,9 @@ Delivered phases 1–8 and partial 6 of [handover.md](./handover.md): a
 Bun/TypeScript/Hono Worker running with pricing, temporary reservation/upload/
 download/HEAD/range, deletion, feedback, quotas, security headers, cleanup
 scheduler, discovery endpoints, dynamic x402 pricing, a full OpenAPI 3.1
-contract + `docs/api.md`, and a self-contained CLI + skill (txlink no-key submit + real x402 client signing),
-with a Vitest suite (63 tests).
+contract + `docs/api.md`, a standalone Node CLI package, and an npm-dependent
+skill (txlink no-key submit + real x402 client signing),
+with a Vitest suite (70 tests).
 Deployed to production behind `https://upload.stupidtech.net` (D1 + R2
 provisioned, migrations applied, secrets set).
 
@@ -36,6 +37,11 @@ Completed in this pass (2026-09-02):
   `delete <id>` without re-supplying a token (the recorded delete bearer token
   is auto-loaded and the entry removed on success). `list` never echoes tokens.
   Sits purely client-side; no API or data-model change.
+- **Node CLI package.** Executable code now lives under `cli/`, builds to a
+  Node.js 22 ESM executable, and is published publicly as
+  `stupid-upload@0.0.2`. The compact agent skill contains only instructions and
+  an API reference; it verifies and globally installs that exact npm version
+  before operation.
 - **Payment method: EIP-3009 only, via txlink address substitution.** A live
   probe showed the deployed permanent route used the `exact` scheme's
   **EIP-3009** default (`transferWithAuthorization`), which embeds the payer
@@ -52,16 +58,16 @@ Completed in this pass (2026-09-02):
   Permit2 allowance is required; the keyed knox flow stays EIP-3009.
 - **No-key paid upload (submit seam).** The CLI now completes
   `upload --permanent` without a private key: it drives `@x402/evm`'s
-  `ExactEvmScheme` with a capturing signer to mint the canonical Permit2
-  witness typed-data and a placeholder payload (`skills/stupid-upload/scripts/
-  submit-exact.ts`), asks a wallet to sign via txlink EIP-7871 `wallet_sign`,
+  `ExactEvmScheme` with a capturing signer to mint the canonical EIP-3009
+  typed-data and a placeholder payload (`cli/src/submit-exact.ts`), asks a
+  wallet to sign via txlink EIP-7871 `wallet_sign`,
   splices the signature + payer `account` into the payload, and re-POSTs it as
   the `PAYMENT-SIGNATURE` header so the CDP facilitator settles `exact`. It
-  fails closed on a payer-bound EIP-3009 route, on a quote above the
+  fails closed on an unsupported payment shape, on a quote above the
   `--max-price-usd`/v1-maximum cap, and on a malformed wallet result. It emits
   one `approvalRequired` JSON line to stderr (never stdout) with the wallet URL
   and polls the txlink result up to `STUPID_UPLOAD_SIGN_TIMEOUT_MS`. Covered by
-  `test/submit-exact.test.ts` (4) and updated `test/cli.test.ts` (4).
+  `test/submit-exact.test.ts` (3) and updated `test/cli.test.ts` (5).
 
 ## Decisions
 
@@ -75,8 +81,10 @@ Completed in this pass (2026-09-02):
   on the configured Base network. The permanent route price is **dynamic**: the
   Hono adapter's `getBody()` reads the request `sizeBytes` (Hono caches the raw
   body, so the handler re-reads it) to mint an exact USDC `402`. Settlement is
-  done by the facilitator. Because the packages lean on Node globals
-  (`Buffer`, ...), `nodejs_compat` is enabled in `wrangler.jsonc`.
+  done by the facilitator. The route advertises `maxTimeoutSeconds: 3600`, so
+  official clients produce EIP-3009 authorizations valid for one hour. Because
+  the packages lean on Node globals (`Buffer`, ...), `nodejs_compat` is enabled
+  in `wrangler.jsonc`.
 - **Idempotent recovery defend-pay**: a request whose idempotency key already
   has a permanent reservation is short-circuited before the payment middleware
   runs, so a retried settlement is not charged twice.
@@ -105,20 +113,39 @@ Completed in this pass (2026-09-02):
   (`test/helpers/fake.ts`) that mirrors exactly the SQL we issue. The x402
   unpaid `402` challenge is tested against a stubbed facilitator `/supported`;
   a funded paid-to-settlement End-to-End is deferred to phases 6/9.
-- **CLI with real x402 + a txlink fallback (Phase 6, partial).** The
-  self-contained `skills/stupid-upload` ships a Bun CLI plus client-side
-  payment modules (`scripts/txlink.ts`, `scripts/pay.ts`). With
-  `STUPID_UPLOAD_PRIVATE_KEY`, `upload`
-  --permanent` signs and pays locally via `@x402/evm` + `@x402/fetch`
-  `wrapFetchWithPayment` (`skills/stupid-upload/scripts/pay.ts`). Without a
-  key, the CLI posts the x402 payment to txlink's stored request API and
-  returns `signatureRequest.url` + `statusUrl`, so a no-key agent can hand the
-  approval to a human and poll for it. The skill was validated and packaged to
-  `dist/stupid-upload.skill` (git-ignored) with the skill-creator tooling.
-  Live settlement of a signed path still needs a funded Base Sepolia account
-  + a reachable facilitator (verification pending).
+- **Node CLI with real x402 + txlink.** The npm CLI under `cli/` signs and pays
+  locally through `@x402/evm` + `@x402/fetch` when
+  `STUPID_UPLOAD_PRIVATE_KEY` is set. Without a key, it creates and polls a
+  txlink wallet-sign request, then submits the completed x402 payload. The
+  repository skill deliberately carries no executable code and pins the npm
+  CLI version it installs.
 
 ## Change Log
+
+### 2026-09-02 (CLI 0.0.2)
+
+- Made temporary retention the CLI default: `stupid-upload upload <path>` now
+  performs the free 24-hour upload, while `--temporary` remains explicit and
+  `--permanent` continues to select paid retention.
+- Set the permanent x402 challenge timeout to 3,600 seconds. The official
+  client derives EIP-3009 `validBefore` from that value, giving keyed and
+  txlink authorization paths the same one-hour expiry.
+- Published `stupid-upload@0.0.2` as npm's `latest`, updated and repackaged the
+  skill to require that exact version, and verified a clean registry install.
+- Deployed the timeout change and verified production returns an exact
+  Base-mainnet `402` challenge with `maxTimeoutSeconds: 3600`.
+
+### 2026-09-02 (Node CLI package)
+
+- Moved CLI source and payment helpers from the agent skill to `cli/`, changed
+  the runtime from Bun to Node.js 22, and published `stupid-upload@0.0.1` with a
+  generated ESM executable.
+- Reduced `skills/stupid-upload` to instructions and its compact API reference;
+  it now requires and verifies the exact globally installed npm CLI version.
+- Added a process-level test for the built Node executable and made the package
+  manifest the source of truth for `--version`.
+- Verified the registry release through a clean global-prefix install, npm-style
+  executable symlink, and a live advisory quote against production.
 
 ### 2026-09-02 (live mainnet)
 

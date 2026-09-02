@@ -47,7 +47,7 @@ settles it; then a reservation is created and the `201` response is returned.
 1. `POST /v1/uploads/permanent` with the metadata body (includes `sizeBytes`)
    and a high-entropy `Idempotency-Key` → read the `PAYMENT-REQUIRED` header's
    exact amount.
-2. Pay it (x402 client; see `@x402/evm` / CLI in a later phase) and resend with
+2. Pay it with an x402 client (the npm CLI uses `@x402/evm`) and resend with
    `PAYMENT-SIGNATURE`.
 3. On success the `201` reservation includes `expiresAt: null` and the settled
    `priceAtomic`/`paymentNetwork`.
@@ -57,11 +57,12 @@ existing reservation without charging again.
 
 ### Via the CLI (no key)
 
-The packaged `stupid-upload` CLI settles paid uploads without your private
-key. Run `stupid-upload upload ./report.pdf --permanent`, approve the printed
-wallet URL, and the command submits the signed payment and uploads the file:
+Install the Node.js 22+ `stupid-upload` CLI, then run the permanent upload.
+Approve the printed wallet URL; the command submits the signed payment and
+uploads the file without receiving your private key:
 
 ```sh
+npm install --global stupid-upload@0.0.2
 stupid-upload upload ./report.pdf --permanent --max-price-usd 0.05
 ```
 
