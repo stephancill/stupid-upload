@@ -35,6 +35,8 @@ Rules for AI agents working in this repository.
   `wrangler secret put` / CI secrets, never the committed config.
 - `STUPID_UPLOAD_HMAC_SECRET` hashes privacy-sensitive inputs (client IPs) and
   the admin secret protects the abuse/legal takedown endpoint.
+- Cloudflare automatically deploys production from `main`. Do not run a manual
+  production deploy unless the user explicitly requests it.
 
 ## Commands
 
