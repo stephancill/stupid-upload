@@ -9,6 +9,7 @@ import { createCdpFacilitator } from "./cdp";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import type { WorkerConfig } from "./config";
 import { pricePermanentUsd } from "./pricing";
+import { MAX_TIMEOUT_SECONDS } from "./webpay";
 
 /** Whether the paid permanent path is fully configured and enabled. */
 export function isPermanentPaymentEnabled(cfg: WorkerConfig): boolean {
@@ -133,7 +134,7 @@ export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler
         network: network as `${string}:${string}`,
         payTo,
         price: dynamicPrice,
-        maxTimeoutSeconds: 60 * 60,
+        maxTimeoutSeconds: MAX_TIMEOUT_SECONDS,
       },
       description: "Stores a file with no scheduled expiration, once paid.",
       mimeType: "application/json",

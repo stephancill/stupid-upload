@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { app } from "../src/app";
+import { registerDiscovery } from "../src/discovery";
 import { makeTestEnv } from "./helpers/fake";
 import { resetBurstStore } from "../src/feedback-rate";
+import { webAccept, capturePayment } from "../src/webpay";
+
+// Register first-party routes (normally done for the Worker in src/index.ts).
+registerDiscovery();
 
 let W: ReturnType<typeof makeTestEnv>;
 
@@ -98,5 +103,50 @@ describe("POST /v1/uploads/permanent (payment)", () => {
     expect(accept.maxTimeoutSeconds).toBe(3600);
     // 1 MiB → $0.01 → 10000 atomic USDC.
     expect(accept.amount).toBe("10000");
+  });
+
+  it("builds a web payment capture the x402 scheme can sign", async () => {
+    const accepted = webAccept({
+      network: "eip155:8453",
+      payTo: PAY_TO_0x,
+      sizeBytes: 10485760, // 10 MiB → $0.028 → 28000
+    });
+    expect(accepted.scheme).toBe("exact");
+    expect(accepted.amount).toBe("28000");
+    expect(accepted.asset).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    expect(accepted.maxTimeoutSeconds).toBe(3600);
+
+    const capture = await capturePayment(
+      accepted,
+      "https://upload.stupidtech.net/v1/uploads/permanent",
+    );
+    expect(capture.accepted.amount).toBe("28000");
+    expect(capture.typedData.primaryType).toBe("TransferWithAuthorization");
+    // The placeholder payload carries the substitute sentinel as `from`.
+    const auth = (capture.payload as any).payload.authorization;
+    expect(String(auth.from).toLowerCase()).toBe(`0x${"a".repeat(40)}`);
+  });
+
+  it("serves the canonical web capture over HTTP when payment is enabled", async () => {
+    W = makeTestEnv({
+      STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED: true,
+      STUPID_UPLOAD_FACILITATOR_URL: FACILITATOR,
+      STUPID_UPLOAD_PAYMENT_NETWORK: "eip155:84532",
+      STUPID_UPLOAD_PAYMENT_ADDRESS: PAY_TO_0x,
+    });
+    const res = await app.request(
+      "/v1/payments/captured",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sizeBytes: 1048576 }),
+      },
+      W,
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json<any>();
+    expect(data.typedData.primaryType).toBe("TransferWithAuthorization");
+    // eip155:84532 → Base USDC @ $0.01 → 10000 atomic.
+    expect(data.accepted.amount).toBe("10000");
   });
 });

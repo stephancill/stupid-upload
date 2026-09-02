@@ -122,6 +122,20 @@ Completed in this pass (2026-09-02):
 
 ## Change Log
 
+### 2026-09-02 (web paid uploads)
+
+- Added an expiry radio group to the landing page: temporary (24 hours, ≤1 MiB)
+  or permanent (never, ≤100 MiB).
+- Permanent uploads in the browser now fetch a canonical EIP-3009 payment from a
+  new `POST /v1/payments/captured` endpoint, ask a wallet to sign it via txlink
+  (`wallet_sign` with account substitution), poll for the result, splice the
+  returned signature + payer into the `PAYMENT-SIGNATURE` header, and complete
+  the upload — the same submit seam the CLI uses, shared in `src/webpay.ts`.
+- `webpay.ts` derives the USDC `accepts` (per-network token, USD Coin domain)
+  with the same pricing/`maxTimeoutSeconds` the permanent middleware uses, so
+  what the page signs matches what the facilitator settles.
+- Added webpay capture + HTTP tests (tests: 72 total).
+
 ### 2026-09-02 (CLI 0.0.2)
 
 - Made temporary retention the CLI default: `stupid-upload upload <path>` now

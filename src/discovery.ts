@@ -1,6 +1,8 @@
 import { app } from "./app";
 import type { WorkerConfig } from "./config";
 import { loadConfig } from "./config";
+import { isPermanentPaymentEnabled } from "./payment";
+import { capturePayment, webAccept } from "./webpay";
 
 /**
  * First-party discovery + documentation routes. The machine contract lives in
@@ -576,56 +578,152 @@ export function registerDiscovery(): void {
     const body = `<h1>stupid upload</h1>
 <p>An agent-friendly interface for free temporary uploads and paid long-term uploads.</p>
 <h2>Upload a file</h2>
-<p>Browser uploads are free up to 1 MiB and expire after 24 hours.</p>
-<form id="upload-form"><input id="file" name="file" type="file" required><button type="submit">Upload</button></form>
+<form id="upload-form">
+  <input id="file" name="file" type="file" required>
+  <fieldset>
+    <legend>How long should it stay?</legend>
+    <label><input type="radio" name="retention" value="temp" checked> 24 hours (free, up to 1 MiB)</label>
+    <label><input type="radio" name="retention" value="perm"> never (Base USDC, up to 100 MiB)</label>
+  </fieldset>
+  <button type="submit">Upload</button>
+</form>
 <p id="upload-status" role="status" aria-live="polite"></p>
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
+<p id="wallet-result" hidden><a id="wallet-link" target="_blank" rel="noopener">Approve the payment in your wallet</a>. Waiting for approval...</p>
 <h2>From the terminal</h2>
 <pre><code>npx --yes stupid-upload upload ./file</code></pre>
-<h2>Long-term storage</h2>
-<p>Paid with Base USDC via x402. Up to 100 MiB, with no scheduled expiration.</p>
+<h2>Permanent storage</h2>
+<p>Paid with Base USDC via x402. Up to 100 MiB, no scheduled expiration.</p>
 <pre><code>npx --yes stupid-upload upload ./file --permanent</code></pre>
 <p><a href="https://github.com/stephancill/stupid-upload">github</a> - <a href="https://x.com/stephancill">twitter</a> - <a href="https://stupidtech.net">stupidtech.net</a> - <a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">skill</a></p>
-<script type="module">
+<script>
 const form = document.querySelector("#upload-form");
 const input = document.querySelector("#file");
 const status = document.querySelector("#upload-status");
 const result = document.querySelector("#upload-result");
 const link = document.querySelector("#upload-link");
+const wallet = document.querySelector("#wallet-result");
+const walletLink = document.querySelector("#wallet-link");
+
+const b64 = (value) => btoa(unescape(encodeURIComponent(value)));
+
+function showResult(url, message) {
+  link.href = url;
+  link.textContent = url;
+  result.hidden = false;
+  status.textContent = message;
+}
+
+function sha256hex(bytes) {
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const file = input.files?.[0];
   if (!file) return;
-  if (file.size > 1048576) {
-    status.textContent = "Temporary uploads are limited to 1 MiB.";
+  const retention = form.elements.retention.value;
+  const limit = retention === "permanent" ? 104857600 : 1048576;
+  if (file.size > limit) {
+    status.textContent = retention === "permanent"
+      ? "Permanent uploads are limited to 100 MiB."
+      : "Temporary uploads are limited to 1 MiB.";
     return;
   }
 
   form.querySelector("button").disabled = true;
   result.hidden = true;
-  status.textContent = "Uploading...";
+  wallet.hidden = true;
+  status.textContent = "Preparing...";
 
   try {
     const bytes = await file.arrayBuffer();
     const digest = await crypto.subtle.digest("SHA-256", bytes);
-    const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    const reserved = await fetch("/v1/uploads/temporary", {
+    const idempotencyKey = crypto.randomUUID().replaceAll("-", "");
+    const meta = {
+      filename: file.name,
+      contentType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+      sha256: sha256hex(digest),
+    };
+
+    if (retention === "temp") {
+      const res = await fetch("/v1/uploads/temporary", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify(meta),
+      });
+      const reservation = await res.json();
+      if (!res.ok) throw new Error(reservation.error?.message || "Could not reserve upload.");
+      status.textContent = "Uploading...";
+      const uploaded = await fetch(reservation.uploadUrl, {
+        method: "PUT",
+        headers: {
+          authorization: "Bearer " + reservation.uploadToken,
+          "content-type": "application/octet-stream",
+        },
+        body: file,
+      });
+      if (uploaded.status !== 201) throw new Error("Could not upload file.");
+      return showResult(reservation.publicUrl, "Upload complete. This link expires 24 hours after upload.");
+    }
+
+    // Permanent: derive the exact payment the x402 route accepts, ask a wallet
+    // to sign it via txlink, then resubmit with PAYMENT-SIGNATURE.
+    const pay = await (await fetch("/v1/payments/captured", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(meta),
+    })).json();
+    if (!pay.typedData || !pay.accepted) throw new Error("Could not quote payment.");
+
+    const sigReq = await (await fetch("https://txlink.stupidtech.net/api/requests", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        method: "wallet_sign",
+        chainId: Number(pay.accepted.network.split(":")[1]),
+        params: { version: "1.0", request: { type: "0x01", data: pay.typedData } },
+      }),
+    })).json();
+    wallet.hidden = false;
+    walletLink.href = sigReq.url;
+    status.textContent = "Approve the payment in your wallet, then this page completes the upload.";
+
+    // Poll txlink until the wallet signs (EIP-7871 returns signature + account).
+    let resolution = null;
+    for (let i = 0; i < 150; i++) {
+      const state = await (await fetch(sigReq.statusUrl)).json();
+      if (state.status === "completed") {
+        resolution = JSON.parse(state.result);
+        break;
+      }
+      if (state.status === "failed") throw new Error("Wallet approval failed.");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (!resolution?.signature || !resolution?.account) throw new Error("Wallet payment not completed.");
+
+    // Splice the real payer + signature into the captured placeholder payload.
+    const inner = pay.payload.payload;
+    inner.signature = resolution.signature;
+    if (String(inner.authorization.from).toLowerCase() === "0x" + "a".repeat(40)) {
+      inner.authorization.from = resolution.account;
+    }
+    pay.payload.payload = inner;
+
+    const signed = await fetch("/v1/uploads/permanent", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": crypto.randomUUID().replaceAll("-", ""),
+        "idempotency-key": idempotencyKey,
+        "payment-signature": b64(JSON.stringify(pay.payload)),
       },
-      body: JSON.stringify({
-        filename: file.name,
-        contentType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
-        sha256,
-      }),
+      body: JSON.stringify(meta),
     });
-    const reservation = await reserved.json();
-    if (!reserved.ok) throw new Error(reservation.error?.message || "Could not reserve upload.");
+    const reservation = await signed.json();
+    if (!signed.ok) throw new Error(reservation.error?.message || "Payment was not accepted.");
 
+    status.textContent = "Uploading...";
     const uploaded = await fetch(reservation.uploadUrl, {
       method: "PUT",
       headers: {
@@ -635,11 +733,7 @@ form.addEventListener("submit", async (event) => {
       body: file,
     });
     if (uploaded.status !== 201) throw new Error("Could not upload file.");
-
-    link.href = reservation.publicUrl;
-    link.textContent = reservation.publicUrl;
-    result.hidden = false;
-    status.textContent = "Upload complete. This link expires 24 hours after upload.";
+    return showResult(reservation.publicUrl, "Upload complete. This link does not expire.");
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : "Upload failed.";
   } finally {
@@ -648,6 +742,36 @@ form.addEventListener("submit", async (event) => {
 });
 </script>`;
     return c.html(page("stupid upload", body));
+  });
+
+  // Canonical web capture: returns the exact EIP-3009 typed data + placeholder
+  // payload for a permanent upload of `sizeBytes`. Only meaningful when the
+  // paid tier is enabled.
+  app.post("/v1/payments/captured", async (c) => {
+    const w = loadConfig({ ...c.env });
+    if (!isPermanentPaymentEnabled(w)) {
+      return c.json(
+        { error: { code: "payment_required", message: "paid uploads are not enabled" } },
+        501,
+      );
+    }
+    let size = 0;
+    try {
+      const raw = await c.req.json();
+      size = Number((raw as any).sizeBytes);
+    } catch {
+      return c.json({ error: { code: "validation_error", message: "invalid body" } }, 400);
+    }
+    const accepted = webAccept({
+      network: w.STUPID_UPLOAD_PAYMENT_NETWORK,
+      payTo: w.STUPID_UPLOAD_PAYMENT_ADDRESS ?? "",
+      sizeBytes: size,
+    });
+    const capture = await capturePayment(
+      accepted,
+      `${w.STUPID_UPLOAD_BASE_URL}/v1/uploads/permanent`,
+    );
+    return c.json(capture);
   });
 
   app.get("/docs", (c) => {

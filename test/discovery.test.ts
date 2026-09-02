@@ -31,7 +31,7 @@ describe("discovery endpoints", () => {
     expect(html).toContain('id="upload-form"');
     expect(html).toContain('fetch("/v1/uploads/temporary"');
     expect(html).toContain("<h2>From the terminal</h2>");
-    expect(html).toContain("<h2>Long-term storage</h2>");
+    expect(html).toContain("<h2>Permanent storage</h2>");
     expect(html).not.toContain("From an agent");
     expect(html).toContain("npx --yes stupid-upload upload ./file");
     expect(html).not.toContain("stupid-upload@0.0.2");
@@ -40,6 +40,10 @@ describe("discovery endpoints", () => {
     expect(html).toContain("/tree/main/skills/stupid-upload");
     expect(html).toContain('property="og:image"');
     expect(html).toContain('href="/favicon.png"');
+    expect(html).toContain('name="retention" value="perm"');
+    expect(html).toContain('name="retention" value="temp"');
+    expect(html).toContain('fetch("/v1/payments/captured"');
+    expect(html).toContain("txlink.stupidtech.net/api/requests");
   });
 
   it("serves /docs", async () => {
