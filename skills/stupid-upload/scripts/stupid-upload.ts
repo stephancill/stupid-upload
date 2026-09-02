@@ -231,11 +231,13 @@ async function cmdPermanentUpload(file: string, contentType?: string): Promise<u
 }
 
 const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+const X402_EXACT_PROXY = "0x402085c248EeA27D92E8b30b2C58ed07f9E20001";
 
 /**
- * EIP-712 signed data for the x402 exact (Permit2) payment. The signature
- * commits to `{ permitted, nonce, deadline }` — deliberately no payer address,
- * so it pairs with EIP-7871 wallet_sign whose connected wallet is substituted.
+ * EIP-712 signed data for the x402 v2 `exact` payment: a Permit2 *witness*
+ * permit (`PermitWitnessTransferFrom`), matching the struct `@x402/evm` signs.
+ * The `witness` carries the payee; there is deliberately no payer address, so it
+ * pairs with EIP-7871 wallet_sign. A rejected permit moves no funds.
  */
 function permit2TypedData(accept: any, chainId: number): Record<string, unknown> {
   const now = Math.floor(Date.now() / 1000);
@@ -244,21 +246,29 @@ function permit2TypedData(accept: any, chainId: number): Record<string, unknown>
   return {
     domain: { name: "PERMIT2", chainId, verifyingContract: PERMIT2_ADDRESS },
     types: {
-      PermitTransferFrom: [
+      PermitWitnessTransferFrom: [
         { name: "permitted", type: "TokenPermissions" },
+        { name: "spender", type: "address" },
         { name: "nonce", type: "uint256" },
         { name: "deadline", type: "uint256" },
+        { name: "witness", type: "Witness" },
       ],
       TokenPermissions: [
         { name: "token", type: "address" },
         { name: "amount", type: "uint256" },
       ],
+      Witness: [
+        { name: "to", type: "address" },
+        { name: "validAfter", type: "uint256" },
+      ],
     },
-    primaryType: "PermitTransferFrom",
+    primaryType: "PermitWitnessTransferFrom",
     message: {
       permitted: { token: accept?.asset, amount: accept?.amount ?? "0" },
+      spender: X402_EXACT_PROXY,
       nonce,
       deadline,
+      witness: { to: accept?.payTo, validAfter: now },
     },
   };
 }
