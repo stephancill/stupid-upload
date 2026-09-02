@@ -29,12 +29,38 @@ different credentials than the deploy token.
 
 ## The paid (permanent) tier
 
-Phase 8 ships permanent **disabled** in production: `POST
-/v1/uploads/permanent` returns `501` until Phase 9. Enabling requires:
+Production ships permanent **disabled**: `POST /v1/uploads/permanent` returns
+`501 server_error` until a mainnet-settling facilitator is wired. Enabling
+requires a facilitator that verifies+settles on **Base mainnet**, not just
+Sepolia:
+
 - `STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=true`,
-- `STUPID_UPLOAD_FACILITATOR_URL` (a mainnet Base facilitator),
+- `STUPID_UPLOAD_FACILITATOR_URL` (a **mainnet** Base facilitator),
 - `STUPID_UPLOAD_PAYMENT_NETWORK=eip155:8453`,
 - `STUPID_UPLOAD_PAYMENT_ADDRESS` (the recipient).
+
+The current `https://x402.org/facilitator` **only supports Base Sepolia**
+(`eip155:84532`) — its `/supported` lists `exact`/`upto`/`batch-settlement`
+for `84532` and no `eip155:8453` kind — so enabling against it errors
+(`500 RouteConfigurationError`). The build is fully wired; the gap is purely
+the network-backed facilitator + a funded recipient. Set the enablement flag
+via `wrangler secret put STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=true`
+(deleting the secret is how you turn it off), and note the boolean coercion
+is string-safe (`false` stays `false`).
+
+## Follow-ups (infra-gated)
+
+- **Dedicated file host** `files.upload.stupidtech.net`: today files serve from
+  the same origin (`STUPID_UPLOAD_FILES_HOST == the API host`). Isolating
+  untrusted content requires a DNS record/zone edit (point the subdomain at the
+  Worker) + a custom-domain route + updating `STUPID_UPLOAD_FILES_HOST`. Needs a
+  Cloudflare zone editor.
+- **R2 lifecycle rule on `temporary/`**: delete objects after ~1 day as
+  defense-in-depth behind the Worker's logical 24h expiry. Configured via the
+  R2 dashboard/API (needs R2-bucket editor credentials, not the deploy token).
+- **Rate Limiting binding** (optional): `LIMITER` is wired in `wrangler.jsonc`
+  as an optional binding and the feedback route smooths against it; attach a
+  real rate-limit rule when you want burst control above the in-process limiter.
 
 ## Triage / abuse
 
