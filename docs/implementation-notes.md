@@ -18,9 +18,10 @@ provisioned, migrations applied, secrets set).
 
 Preview-card branding (2026-09-02): re-rendered `public/og.png` (1200×630,
 RGB) so the Stupid "ST" logo fills the card instead of a tiny mark on empty
-white — it now reads clearly in the small square link-summary preview. Added
-explicit Open Graph image dimensions/type and `twitter:card`/`twitter:image`
-tags in `page()` so Twitter serves the logo reliably.
+white — paired with `twitter:card=summary`, the centered logo center-crops to a
+clear ~120×120 square thumbnail beside the title/description. Added explicit
+Open Graph image dimensions/type and `twitter:title`/`twitter:description`/
+`twitter:image` tags to `page()` so X serves the logo reliably.
 
 Completed in this pass (2026-09-02):
 - **Phase 5** — OpenAPI hardened (full component schemas, download + feedback
