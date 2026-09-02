@@ -590,6 +590,10 @@ export function registerDiscovery(): void {
 <p id="upload-status" role="status" aria-live="polite"></p>
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
 <p id="wallet-result" hidden><span id="wallet-qr"></span><a id="wallet-link" target="_blank" rel="noopener">Approve the payment in your wallet</a>. Waiting for approval...</p>
+<section id="uploaded-section" hidden>
+  <h2>Your uploads</h2>
+  <ul id="uploaded-list"></ul>
+</section>
 <h2>From the terminal</h2>
 <pre><code>npx --yes stupid-upload upload ./file</code></pre>
 <h2>Permanent storage</h2>

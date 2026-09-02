@@ -122,6 +122,16 @@ Completed in this pass (2026-09-02):
 
 ## Change Log
 
+### 2026-09-02 (local upload history)
+
+- The landing page now records every successful upload in browser `localStorage`
+  (`stupid-upload.history`) and lists them under a "Your uploads" section that
+  is hidden when the list is empty. Each entry shows the filename + public URL
+  and a Delete button. Delete issues `DELETE /v1/uploads/{id}` with the
+  reservation's bearer delete token (mirroring the CLI's local registry) and
+  removes the entry on `200`/`410`. The section re-renders after each upload,
+  delete, and on page load.
+
 ### 2026-09-02 (wallet QR placement)
 
 - On the landing page, the wallet-approval QR now renders above the approve

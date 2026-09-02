@@ -11,6 +11,87 @@ const link = document.querySelector('#upload-link');
 const wallet = document.querySelector('#wallet-result');
 const walletLink = document.querySelector('#wallet-link');
 const walletQr = document.querySelector('#wallet-qr');
+const historySection = document.querySelector('#uploaded-section');
+const historyList = document.querySelector('#uploaded-list');
+
+const HISTORY_KEY = 'stupid-upload.history';
+
+function readHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(items) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+}
+
+function recordUpload(reservation, retention) {
+  const items = readHistory();
+  items.unshift({
+    id: reservation.id,
+    filename: reservation.filename,
+    publicUrl: reservation.publicUrl,
+    deleteToken: reservation.deleteToken,
+    retention,
+    sizeBytes: reservation.sizeBytes,
+    expiresAt: reservation.expiresAt ?? null,
+    uploadedAt: Date.now(),
+  });
+  writeHistory(items);
+  renderHistory();
+}
+
+function removeFromHistory(id) {
+  writeHistory(readHistory().filter((entry) => entry.id !== id));
+  renderHistory();
+}
+
+async function deleteUpload(entry, button) {
+  button.disabled = true;
+  status.textContent = 'Deleting...';
+  try {
+    const res = await fetch(`/v1/uploads/${encodeURIComponent(entry.id)}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${entry.deleteToken}` },
+    });
+    // 200 = deleted, 410 = already gone; either way it should leave the list.
+    if (res.status !== 200 && res.status !== 410) {
+      const body = await res.json().catch(() => null);
+      status.textContent = body?.error?.message || 'Could not delete upload.';
+      return;
+    }
+    removeFromHistory(entry.id);
+    status.textContent = 'Upload deleted.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderEntry(entry) {
+  const li = document.createElement('li');
+  const link = document.createElement('a');
+  link.href = entry.publicUrl;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = entry.filename;
+  li.appendChild(link);
+  li.appendChild(document.createTextNode(` — ${entry.publicUrl}`));
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.textContent = 'Delete';
+  del.addEventListener('click', () => deleteUpload(entry, del));
+  li.appendChild(del);
+  return li;
+}
+
+function renderHistory() {
+  const items = readHistory();
+  historySection.hidden = items.length === 0;
+  historyList.replaceChildren(...items.map(renderEntry));
+}
 
 const b64 = (value) => btoa(unescape(encodeURIComponent(value)));
 
@@ -98,6 +179,7 @@ form.addEventListener('submit', async (event) => {
         body: file,
       });
       if (uploaded.status !== 201) throw new Error('Could not upload file.');
+      recordUpload(reservation, 'temp');
       return showResult(
         reservation.publicUrl,
         'Upload complete. This link expires 24 hours after upload.',
@@ -188,6 +270,7 @@ form.addEventListener('submit', async (event) => {
       body: file,
     });
     if (uploaded.status !== 201) throw new Error('Could not upload file.');
+    recordUpload(reservation, 'perm');
     return showResult(reservation.publicUrl, 'Upload complete. This link does not expire.');
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : 'Upload failed.';
@@ -195,3 +278,5 @@ form.addEventListener('submit', async (event) => {
     form.querySelector('button').disabled = false;
   }
 });
+
+renderHistory();
