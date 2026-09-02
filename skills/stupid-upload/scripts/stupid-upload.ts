@@ -25,6 +25,14 @@ import {
   encodePaymentSignatureHeader,
   type WalletSignature,
 } from "./submit-exact";
+import {
+  addRecord,
+  deleteTokenFor,
+  publicRecord,
+  readRegistry,
+  removeRecord,
+  type UploadRecord,
+} from "./registry";
 
 const MIB = 1048576;
 const MAX_TEMPORARY = MIB;
@@ -131,6 +139,33 @@ async function putContent(file: string, reservation: any): Promise<void> {
   }
 }
 
+/** Persist a successful upload in the local registry (record + token). */
+async function persistUpload(params: {
+  id: string;
+  file: string;
+  retention: "temporary" | "permanent";
+  sizeBytes: number;
+  sha256: string;
+  publicUrl: string;
+  deleteToken: string;
+  expiresAt: number | null;
+}): Promise<UploadRecord> {
+  const record: UploadRecord = {
+    id: params.id,
+    path: path.resolve(params.file),
+    filename: path.basename(params.file),
+    retention: params.retention,
+    sizeBytes: params.sizeBytes,
+    sha256: params.sha256,
+    publicUrl: params.publicUrl,
+    createdAt: Math.floor(Date.now() / 1000),
+    expiresAt: params.expiresAt,
+    deleteToken: params.deleteToken,
+  };
+  await addRecord(record);
+  return record;
+}
+
 // Commands -------------------------------------------------------------
 
 export {
@@ -140,6 +175,7 @@ export {
   cmdStatus,
   cmdDelete,
   cmdFeedback,
+  cmdList,
   valueOf,
 };
 
@@ -167,6 +203,16 @@ async function cmdTemporaryUpload(file: string, contentType?: string): Promise<u
   });
   if (res.status !== 201) fail("validation", body?.error?.message ?? "reserve failed");
   await putContent(file, body);
+  await persistUpload({
+    id: body.id,
+    file,
+    retention: "temporary",
+    sizeBytes: size,
+    sha256,
+    publicUrl: body.publicUrl,
+    deleteToken: body.deleteToken,
+    expiresAt: body.expiresAt ?? null,
+  });
   return { ok: true, command: "upload", retention: "temporary", ...body };
 }
 
@@ -193,6 +239,16 @@ async function cmdPermanentUpload(
     const paidBody: any = await toJson(paid);
     if (paid.status === 201 && paidBody?.id) {
       await putContent(file, paidBody);
+      await persistUpload({
+        id: paidBody.id,
+        file,
+        retention: "permanent",
+        sizeBytes: size,
+        sha256,
+        publicUrl: paidBody.publicUrl,
+        deleteToken: paidBody.deleteToken,
+        expiresAt: null,
+      });
       return { ok: true, command: "upload", retention: "permanent", ...paidBody };
     }
     fail("payment", paidBody?.error?.message ?? `payment failed (${paid.status})`, {
@@ -267,6 +323,16 @@ async function cmdPermanentUpload(
   });
   if (submit.res.status === 201 && submit.body?.id) {
     await putContent(file, submit.body);
+    await persistUpload({
+      id: submit.body.id,
+      file,
+      retention: "permanent",
+      sizeBytes: size,
+      sha256,
+      publicUrl: submit.body.publicUrl,
+      deleteToken: submit.body.deleteToken,
+      expiresAt: null,
+    });
     return {
       ok: true,
       command: "upload",
@@ -357,13 +423,25 @@ async function cmdStatus(id: string): Promise<unknown> {
 }
 
 async function cmdDelete(id: string, token?: string): Promise<unknown> {
-  const bearer = token ?? process.env.STUPID_UPLOAD_DELETE_TOKEN;
-  if (!bearer) fail("validation", "provide --token or STUPID_UPLOAD_DELETE_TOKEN");
+  const bearer = token ?? process.env.STUPID_UPLOAD_DELETE_TOKEN ?? (await deleteTokenFor(id));
+  if (!bearer)
+    fail("validation", "provide --token, STUPID_UPLOAD_DELETE_TOKEN, or a recorded upload id");
   const { res, body } = await api(`/v1/uploads/${id}`, {
     method: "DELETE",
     headers: { authorization: `Bearer ${bearer}` },
   });
+  if (res.ok) await removeRecord(id);
   return { ok: res.ok, command: "delete", id, http: res.status, body };
+}
+
+async function cmdList(): Promise<unknown> {
+  const records = await readRegistry();
+  return {
+    ok: true,
+    command: "list",
+    count: records.length,
+    uploads: records.map(publicRecord),
+  };
 }
 
 async function cmdFeedback(category: string, message: string, flag: string): Promise<unknown> {
@@ -386,8 +464,9 @@ Commands:
   upload <path> --permanent [--max-price-usd 0.20]
                        Pay via x402 + upload (<=100 MiB; lower spend cap optional)
   status <id>                       Upload status
-  delete <id> --token <token>       Delete (or STUPID_UPLOAD_DELETE_TOKEN)
-  feedback --category <c> --message <m> [--rating 1-9]
+  list                              List locally-recorded uploads
+  delete <id> [--token <token>]     Delete (token auto-loaded from local list)
+  feedback --category <c> --message <m> [--rating 1-5]
 `;
 
 function valueOf(args: string[], flag: string): string {
@@ -421,6 +500,8 @@ async function main(): Promise<void> {
     }
     case "status":
       return emit(await cmdStatus(rest[0]));
+    case "list":
+      return emit(await cmdList());
     case "delete":
       return emit(await cmdDelete(rest[0], valueOf(rest, "--token") || undefined));
     case "download":

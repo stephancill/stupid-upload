@@ -28,6 +28,9 @@ stupid-upload <command>
   the key from a CLI flag.
 - `STUPID_UPLOAD_SIGN_TIMEOUT_MS` — how long `upload --permanent` waits for a
   human to approve the no-key txlink signature (default 5 minutes).
+- `STUPID_UPLOAD_STATE_FILE` — local upload-registry JSON path (default
+  `~/.stupid-upload/uploads.json`). Holds bearer delete tokens, so it's created
+  mode `0600`; keep it private and never share or commit it.
 
 ## Commands
 
@@ -36,9 +39,27 @@ stupid-upload quote <path>
 stupid-upload upload <path> --temporary
 stupid-upload upload <path> --permanent [--max-price-usd <n>]
 stupid-upload status <id>
+stupid-upload list
 stupid-upload delete <id> [--token <delete-token>]
 stupid-upload feedback --category <category> --message <text> [--rating 1-5]
 ```
+
+## Local registry
+
+Every successful `upload` is recorded in the local registry (default
+`~/.stupid-upload/uploads.json`, override with `STUPID_UPLOAD_STATE_FILE`). Each
+entry stores the upload id, source path, public URL, size/hash, retention and
+the bearer delete token.
+
+- `stupid-upload list` prints the recorded uploads (public fields only — never
+  delete tokens).
+- `stupid-upload delete <id>` deletes using the **recorded** delete token when
+  neither `--token` nor `STUPID_UPLOAD_DELETE_TOKEN` is given, and removes the
+  entry from the list on success.
+
+The state file holds bearer delete credentials: it is written with mode `0600`.
+Keep it private, add it to `.gitignore` if the CLI ever runs inside a repo, and
+rotate by deleting the file (you'll lose the convenience of token-less deletes).
 
 `--max-price-usd` (permanent) caps the quoted payment at `n` US dollars; it
 fails closed before any wallet is invoked if the server's x402 amount exceeds

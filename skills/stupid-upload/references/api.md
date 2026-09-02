@@ -55,7 +55,10 @@ route. Repeats return the existing reservation without consuming quota.
 
 The CLI (`scripts/stupid-upload.ts`) emits stable JSON. Paid path without a
 key builds the exact x402 payment via `submit-exact.ts` (a capturing signer
-derives the Permit2 witness typed-data), asks the wallet (EIP-7871
-`wallet_sign`) to sign it via txlink, then splices the returned signature +
-payer into the payload and submits it as `PAYMENT-SIGNATURE` to settle. Set
-`STUPID_UPLOAD_PRIVATE_KEY` to sign + settle automatically instead.
+derives the EIP-3009 typed-data), asks the wallet to sign it via txlink
+`wallet_sign` (type `0x01`, account substitution), then submits the replaced
+signature + payer as `PAYMENT-SIGNATURE` to settle. Set
+`STUPID_UPLOAD_PRIVATE_KEY` to sign + settle automatically instead. Successful
+uploads are recorded in a local registry (`STUPID_UPLOAD_STATE_FILE`, default
+`~/.stupid-upload/uploads.json`, mode `0600`): `list` shows them (no tokens)
+and `delete <id>` uses the recorded delete token automatically.

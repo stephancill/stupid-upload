@@ -10,7 +10,8 @@
     ".": "./scripts/stupid-upload.ts",
     "./txlink": "./scripts/txlink.ts",
     "./pay": "./scripts/pay.ts",
-    "./submit-exact": "./scripts/submit-exact.ts"
+    "./submit-exact": "./scripts/submit-exact.ts",
+    "./registry": "./scripts/registry.ts"
   },
   "scripts": {
     "start": "bun ./scripts/stupid-upload.ts"

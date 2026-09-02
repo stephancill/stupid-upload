@@ -9,3 +9,4 @@ worker-configuration.d.ts
 .env.*
 !.env.example
 *.skill
+.stupid-upload/

@@ -30,6 +30,12 @@ Completed in this pass (2026-09-02):
   Base USDC). A final live **settlement** (a real `$0.011`-class payment from a
   funded mainnet USDC account) is the one remaining Phase-9 acceptance item.
 - **Phase 10** — deployment/decision log updated (this file).
+- **Local upload registry.** The CLI now records every successful upload in a
+  local JSON file (`STUPID_UPLOAD_STATE_FILE`, default `~/.stupid-upload/
+  uploads.json`, written mode `0600`) so users can `list` recorded uploads and
+  `delete <id>` without re-supplying a token (the recorded delete bearer token
+  is auto-loaded and the entry removed on success). `list` never echoes tokens.
+  Sits purely client-side; no API or data-model change.
 - **Payment method: EIP-3009 only, via txlink address substitution.** A live
   probe showed the deployed permanent route used the `exact` scheme's
   **EIP-3009** default (`transferWithAuthorization`), which embeds the payer

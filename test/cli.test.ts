@@ -5,11 +5,14 @@ import path from "node:path";
 import {
   cmdTemporaryUpload,
   cmdPermanentUpload,
+  cmdDelete,
+  cmdList,
 } from "../skills/stupid-upload/scripts/stupid-upload";
 import { buildX402Fetcher } from "../skills/stupid-upload/scripts/pay";
 
 process.env.STUPID_UPLOAD_BASE_URL = "https://api.test";
 process.env.TXLINK_BASE_URL = "https://txlink.test";
+process.env.STUPID_UPLOAD_STATE_FILE = path.join(tmpdir(), "stu-cli-state.json");
 delete process.env.STUPID_UPLOAD_PRIVATE_KEY;
 
 const paymentRequired = Buffer.from(
@@ -104,12 +107,20 @@ function stubFetch() {
         headers: { "content-type": "application/json" },
       });
     }
+    if (method === "DELETE") {
+      const m = /\/v1\/uploads\/([^/?]+)/.exec(url);
+      return new Response(JSON.stringify({ id: m?.[1] ?? "", status: "deleted" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     return new Response("", { status: 404 });
   });
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  rm(process.env.STUPID_UPLOAD_STATE_FILE!, { force: true });
 });
 
 describe("stupid-upload CLI commands", () => {
@@ -146,6 +157,30 @@ describe("stupid-upload CLI commands", () => {
     const file = path.join(dir, "big.bin");
     await writeFile(file, "x".repeat(1024));
     await expect(cmdPermanentUpload(file, "application/octet-stream", "0.001")).rejects.toThrow();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("lists recorded uploads and deletes by recorded id without a token", async () => {
+    stubFetch();
+    const dir = await mkdtemp(path.join(tmpdir(), "stu-lst-"));
+    const file = path.join(dir, "a.txt");
+    await writeFile(file, "hello");
+    await cmdTemporaryUpload(file, "text/plain");
+
+    const list = (await cmdList()) as any;
+    expect(list.command).toBe("list");
+    expect(list.count).toBe(1);
+    expect(list.uploads[0].id).toBe("temp_1");
+    // list never leaks the delete token.
+    expect(list.uploads[0].deleteToken).toBeUndefined();
+
+    // Delete by recorded id: the token comes from the local registry.
+    const del = (await cmdDelete("temp_1")) as any;
+    expect(del.ok).toBe(true);
+    expect(del.http).toBe(200);
+
+    const list2 = (await cmdList()) as any;
+    expect(list2.count).toBe(0);
     await rm(dir, { recursive: true, force: true });
   });
 
