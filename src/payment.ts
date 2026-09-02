@@ -118,6 +118,10 @@ export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler
         scheme: "exact",
         network: network as `${string}:${string}`,
         payTo,
+        // Use an address-free Permit2 witness (not EIP-3009), so no-key clients
+        // can sign the exact payment via EIP-7871 wallet_sign and submit the
+        // resulting `exact` settlement as PAYMENT-SIGNATURE.
+        extra: { assetTransferMethod: "permit2" },
         price: async (ctx: { adapter?: { getBody?: () => unknown } }) => {
           const raw = ctx.adapter?.getBody
             ? (ctx.adapter.getBody() as Promise<unknown>)
