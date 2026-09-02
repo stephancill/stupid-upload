@@ -6,15 +6,33 @@ infrastructure details, or raw user data.
 
 ## Status
 
-Delivered phases 1–4, partial 6, and deployment of 8 of [handover.md](./handover.md):
-a Bun/TypeScript/Hono Worker running with pricing, temporary reservation/upload/
+Delivered phases 1–8 and partial 6 of [handover.md](./handover.md): a
+Bun/TypeScript/Hono Worker running with pricing, temporary reservation/upload/
 download/HEAD/range, deletion, feedback, quotas, security headers, cleanup
-scheduler, discovery endpoints, dynamic x402 pricing, and a self-contained CLI
-+ skill (txlink fallback + real x402 client signing), with a Vitest suite.
+scheduler, discovery endpoints, dynamic x402 pricing, a full OpenAPI 3.1
+contract + `docs/api.md`, and a self-contained CLI + skill (txlink fallback +
+real x402 client signing), with a Vitest suite (54 tests).
 Deployed to production behind `https://upload.stupidtech.net` (D1 + R2
-provisioned, migrations applied, secrets set). Phases 5, 7, 9–10 (OpenAPI/API
-validation, skill packaging, the mainnet paid tier, and its verification) are
-deferred.
+provisioned, migrations applied, secrets set).
+
+Completed in this pass (2026-09-02):
+- **Phase 5** — OpenAPI hardened (full component schemas, download + feedback
+  operations, `402` header, `x-bazaar` examples, drift-guard tests) and the
+  missing `docs/api.md` added, plus enriched `/docs`, `/` and `/llms.txt`.
+- **Phase 7** — oxfmt/oxlint/`tsc --noEmit`/Vitest clean (54 tests), local
+  Wrangler smoke passed CLI→Worker (quote → reserve → upload → download →
+  status → delete → `410`).
+- **Phase 9 prep** — the advisory pricing endpoint was fixed: it previously
+  returned `500` because `priceAtomic` was a `BigInt` that `JSON.stringify`
+  rejects. Serialized safely; route-level regression tests added.
+- **Phase 10** — deployment/decision log updated (this file).
+
+**Deferred (Phase 9, revised):** the production paid tier. It is still gated
+off (`501`) and requires a funded Base-mainnet vantage, a reachable mainnet
+x402 facilitator URL, and a payment recipient (`STUPID_UPLOAD_PAYMENT_ADDRESS`)
+before `STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=true` + a production deploy,
+then one live $0.01 settlement and Bazaar indexing confirmation. The Base
+Sepolia paid flow was already validated live (see Change Log).
 
 ## Decisions
 
@@ -72,6 +90,33 @@ deferred.
   + a reachable facilitator (verification pending).
 
 ## Change Log
+
+### 2026-09-02
+
+- **Phase 5 (complete):** hardened `src/discovery.ts` — the OpenAPI 3.1
+  contract now has full component schemas (`UploadMetadata`, `Error`,
+  `Reservation`, `UploadComplete`, `Feedback`, `FeedbackResponse`, `Pricing`),
+  all operations with stable `operationId`s + responses (including
+  `GET /f/{id}/{filename}`, `HEAD`, `/v1/feedback`, `/health`), the `402`
+  `PAYMENT-REQUIRED` header, and a Bazaar `x-bazaar` request/response example
+  on the permanent route. Added the missing `docs/api.md` and enriched `/docs`,
+  `/llms.txt`. Added drift-guard tests tying `docs/api.md` to `/openapi.json`.
+- **Phase 7:** full local validation. Format/oxlint/`tsc --noEmit` clean;
+  suite at **54 tests**. Ran a local Wrangler smoke test: CLI → Worker
+  quote/reserve/upload/download/status/delete/`410` end-to-end — and it found
+  a real bug (below).
+- **Material fix: advisory pricing returned `500`.** `POST-/…/v1/pricing`
+  passed the raw `priceTemporary`/`pricePermanent` results (containing a
+  `BigInt` `priceAtomic`) straight to `c.json`, which `JSON.stringify` can't
+  serialize — every size, temp or permanent, failed. `app.ts` now rounds the
+  numeric payload through a BigInt-safe serializer; HTTP-level regression tests
+  were added to `test/pricing.test.ts`.
+- **Phase 10:** updated this Status + Change Log. `docs/operations.md` still
+  records the pending Phase 9 (production paid tier) enablement steps and the
+  `files.upload.*` host / R2 `temporary/` lifecycle follow-ups.
+- Deferred: production mainnet paid tier (`501` until Phase 9 — needs a funded
+  Base-mainnet account, a reachable mainnet facilitator, and
+  `STUPID_UPLOAD_PAYMENT_ADDRESS`).
 
 ### 2026-09-01
 

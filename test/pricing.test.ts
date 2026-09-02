@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   pricePermanent,
   priceTemporary,
@@ -8,8 +8,46 @@ import {
   atomicToUsd,
   PAYMENT_NETWORKS,
 } from "../src/pricing";
+import { app } from "../src/app";
+import { makeTestEnv } from "./helpers/fake";
 
 const MIB = 1048576;
+
+describe("(HTTP) /v1/pricing stays JSON-serializable", () => {
+  let W: ReturnType<typeof makeTestEnv>;
+  beforeEach(() => {
+    W = makeTestEnv();
+  });
+
+  async function getPricing(sizeBytes: number) {
+    return app.request(`/v1/pricing?sizeBytes=${sizeBytes}`, {}, W);
+  }
+
+  it("returns 200 JSON for a sub-1-MiB advisory (no BigInt 500)", async () => {
+    const res = await getPricing(1234);
+    expect(res.status).toBe(200);
+    const body = await res.json<any>();
+    expect(body.sizeBytes).toBe(1234);
+    expect(body.permanent.priceUsd).toBe(0.01);
+    expect(typeof body.priceAtomic).toBe("number");
+    expect(typeof body.permanent.priceAtomic).toBe("number");
+  });
+
+  it("returns 200 JSON for a permanent >1 MiB advisory (no BigInt 500)", async () => {
+    const res = await getPricing(10 * MIB);
+    expect(res.status).toBe(200);
+    const body = await res.json<any>();
+    expect(body.priceUsd).toBeCloseTo(0.028, 9);
+    expect(typeof body.priceAtomic).toBe("number");
+    expect(body.priceAtomic).toBe(28000);
+  });
+
+  it("rejects out-of-range and validates boundaries at the HTTP layer", async () => {
+    expect((await getPricing(100 * MIB + 1)).status).toBe(400);
+    expect((await getPricing(100 * MIB)).status).toBe(200); // max exactly
+    expect((await getPricing(0)).status).toBe(200); // min
+  });
+});
 
 describe("pricing boundaries", () => {
   it("bills a flat $0.01 for empty to 1 MiB permanent", () => {

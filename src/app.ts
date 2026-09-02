@@ -209,11 +209,19 @@ app.get("/v1/pricing", (c) => {
     return sendError(c, 400, "validation_error", "sizeBytes must be an integer within limits");
   }
   const { sizeBytes } = parsed.data;
-  if (sizeBytes <= LIMITS.maxTemporaryBytes) {
-    return c.json({ ...priceTemporary(sizeBytes), permanent: pricePermanent(sizeBytes) });
-  }
-  return c.json(pricePermanent(sizeBytes));
+  // pricePermanent returns priceAtomic as a BigInt, which JSON.stringify cannot
+  // handle. Convert BigInts to Number for the JSON body (the range fits easily).
+  const payload =
+    sizeBytes <= LIMITS.maxTemporaryBytes
+      ? { ...jsonSafe(priceTemporary(sizeBytes)), permanent: jsonSafe(pricePermanent(sizeBytes)) }
+      : jsonSafe(pricePermanent(sizeBytes));
+  return c.json(payload);
 });
+
+/** JSON-encode while coercing BigInt values to Number (avoids JSON 500s). */
+function jsonSafe(value: unknown): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? Number(v) : v)));
+}
 
 // --------------------------------------------------------------------------
 // POST /v1/uploads/temporary
