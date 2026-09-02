@@ -25,14 +25,11 @@ Completed in this pass (2026-09-02):
 - **Phase 9 prep** — the advisory pricing endpoint was fixed: it previously
   returned `500` because `priceAtomic` was a `BigInt` that `JSON.stringify`
   rejects. Serialized safely; route-level regression tests added.
+- **Phase 9 —** the **paid tier is LIVE on Base mainnet** via the Coinbase
+  CDP hosted x402 facilitator (challenge side verified live: exact `eip155:8453`
+  Base USDC). A final live **settlement** (a real `$0.011`-class payment from a
+  funded mainnet USDC account) is the one remaining Phase-9 acceptance item.
 - **Phase 10** — deployment/decision log updated (this file).
-
-**Deferred (Phase 9, revised):** the production paid tier. It is still gated
-off (`501`) and requires a funded Base-mainnet vantage, a reachable mainnet
-x402 facilitator URL, and a payment recipient (`STUPID_UPLOAD_PAYMENT_ADDRESS`)
-before `STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=true` + a production deploy,
-then one live $0.01 settlement and Bazaar indexing confirmation. The Base
-Sepolia paid flow was already validated live (see Change Log).
 
 ## Decisions
 
@@ -91,6 +88,26 @@ Sepolia paid flow was already validated live (see Change Log).
 
 ## Change Log
 
+### 2026-09-02 (late)
+
+- **Paid tier is LIVE on Base mainnet (Phase 9, challenge side).** Switched the
+  facilitator from the public `x402.org` (Sepolia-only) to the **Coinbase CDP
+  hosted x402 facilitator**, which supports `eip155:8453` `exact` (confirmed via
+  `GET /platform/v2/x402/supported`: `kinds[].network === "eip155:8453"`).
+  Implemented light-in-Worker CDP auth in `src/cdp.ts`: sign a per-endpoint CDP
+  JWT (Ed25519) with `generateJwt` from `@coinbase/cdp-sdk/auth` and feed
+  `HTTPFacilitatorClient.createAuthHeaders` — avoiding the multi-chain CDP SDK
+  `./x402` facade (whose static `@x402/svm` import would not bundle). CDP creds
+  are `wrangler` secrets (`CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`).
+- **Verified live:** unpaid `POST /v1/uploads/permanent` now returns a real
+  `402` — `network eip155:8453`, `asset 0x8335…2913` (Base USDC), `amount
+  28000` ($0.028 for 10 MiB), `payTo` the configured recipient. Pricing, temp
+  uploads, and `/health` still return `200`/`201`.
+- Removed the now-misleading `STUPID_UPLOAD_FACILITATOR_URL` secret (CDP creds
+  supersede it). Note: a real mainnet **settlement** still needs a caller with
+  funded mainnet USDC; the challenge/verify/settle machinery is shared with the
+  already-live Sepolia run described below.
+
 ### 2026-09-02
 
 - **Phase 5 (complete):** hardened `src/discovery.ts` — the OpenAPI 3.1
@@ -127,7 +144,7 @@ Sepolia paid flow was already validated live (see Change Log).
   (parses `true/1/false/0`, else default) and `test/config.test.ts` guards it.
 - **Mainnet paid tier blocker (material):** `https://x402.org/facilitator`
   only supports EVM on **Base Sepolia (`eip155:84532`)** — its `/supported`
-  list has no `eip155:8458` (Base mainnet) `exact`/`upto`/`batch-settlement`
+  list has no `eip155:8453` (Base mainnet) `exact`/`upto`/`batch-settlement`
   kind. Enabling against it returned `500 RouteConfigurationError: Facilitator
   does not support scheme exact on network eip155:8453`. The paid tier is
   therefore still gated off (`501`) until a facilitator that settles on Base

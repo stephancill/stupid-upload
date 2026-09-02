@@ -20,6 +20,7 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@coinbase/cdp-sdk": "1.55.0",
     "@x402/core": "^2.24.0",
     "@x402/evm": "^2.24.0",
     "@x402/fetch": "^2.24.0",

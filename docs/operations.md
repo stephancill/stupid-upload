@@ -29,24 +29,23 @@ different credentials than the deploy token.
 
 ## The paid (permanent) tier
 
-Production ships permanent **disabled**: `POST /v1/uploads/permanent` returns
-`501 server_error` until a mainnet-settling facilitator is wired. Enabling
-requires a facilitator that verifies+settles on **Base mainnet**, not just
-Sepolia:
+The permanent tier is **live on Base mainnet** (`eip155:8453`) via the
+Coinbase CDP hosted x402 facilitator. An unpaid `POST
+/v1/uploads/permanent` returns an exact x402 `402` (`eip155:8453`, Base USDC)
+that a payment-capable client resolves and settles.
 
+Wiring (all via `wrangler secret`/vars, never the committed public config):
 - `STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=true`,
-- `STUPID_UPLOAD_FACILITATOR_URL` (a **mainnet** Base facilitator),
+- `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET` (Coinbase Developer Platform credentials),
 - `STUPID_UPLOAD_PAYMENT_NETWORK=eip155:8453`,
 - `STUPID_UPLOAD_PAYMENT_ADDRESS` (the recipient).
 
-The current `https://x402.org/facilitator` **only supports Base Sepolia**
-(`eip155:84532`) — its `/supported` lists `exact`/`upto`/`batch-settlement`
-for `84532` and no `eip155:8453` kind — so enabling against it errors
-(`500 RouteConfigurationError`). The build is fully wired; the gap is purely
-the network-backed facilitator + a funded recipient. Set the enablement flag
-via `wrangler secret put STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=true`
-(deleting the secret is how you turn it off), and note the boolean coercion
-is string-safe (`false` stays `false`).
+The worker signs a CDP JWT per endpoint (`verify`/`settle`/`supported`) from the
+CDP key and drives `HTTPFacilitatorClient.createAuthHeaders` ("src/cdp.ts") —
+this avoids importing the full multi-chain CDP SDK into the Worker bundle. The
+boolean enablement flag is string-safe (see Change Log).
+
+Turn it off by deleting the `STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED` secret.
 
 ## Follow-ups (infra-gated)
 

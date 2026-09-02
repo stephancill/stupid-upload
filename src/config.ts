@@ -101,6 +101,9 @@ const ConfigSchema = z.object({
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
     .optional(),
+  /** Coinbase CDP facilitator credentials (used instead of STUPID_UPLOAD_FACILITATOR_URL). */
+  CDP_API_KEY_ID: z.string().min(1).optional(),
+  CDP_API_KEY_SECRET: z.string().min(1).optional(),
 });
 
 /** Cloudflare bindings injected by Wrangler. */

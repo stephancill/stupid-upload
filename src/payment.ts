@@ -5,22 +5,34 @@ import {
   x402ResourceServer,
 } from "@x402/hono";
 import { HTTPFacilitatorClient } from "@x402/core/server";
+import { createCdpFacilitator } from "./cdp";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import type { WorkerConfig } from "./config";
 import { pricePermanentUsd } from "./pricing";
 
 /** Whether the paid permanent path is fully configured and enabled. */
 export function isPermanentPaymentEnabled(cfg: WorkerConfig): boolean {
-  return Boolean(
-    cfg.STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED &&
-    cfg.STUPID_UPLOAD_FACILITATOR_URL &&
-    cfg.STUPID_UPLOAD_PAYMENT_ADDRESS,
-  );
+  if (!cfg.STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED || !cfg.STUPID_UPLOAD_PAYMENT_ADDRESS)
+    return false;
+  const hasCdp = Boolean(cfg.CDP_API_KEY_ID && cfg.CDP_API_KEY_SECRET);
+  return Boolean(cfg.STUPID_UPLOAD_FACILITATOR_URL || hasCdp);
 }
 
 /** Exact dollar string a client must pay for a permanent upload of a size. */
 export function priceDollar(sizeBytes: number): string {
   return `${pricePermanentUsd(Math.max(0, Math.floor(sizeBytes)))}`;
+}
+
+/**
+ * Builds the x402 facilitator client. Prefer the CDP hosted facilitator (Base
+ * mainnet is a CDP default network) when credentials are present; otherwise
+ * fall back to a generic HTTP facilitator URL (tests, self-hosted facilitator).
+ */
+function buildFacilitator(cfg: WorkerConfig): HTTPFacilitatorClient {
+  if (cfg.CDP_API_KEY_ID && cfg.CDP_API_KEY_SECRET) {
+    return createCdpFacilitator(cfg.CDP_API_KEY_ID, cfg.CDP_API_KEY_SECRET);
+  }
+  return new HTTPFacilitatorClient({ url: cfg.STUPID_UPLOAD_FACILITATOR_URL ?? "" });
 }
 
 /**
@@ -31,11 +43,10 @@ export function priceDollar(sizeBytes: number): string {
  * then lets the route handler run (see app.ts).
  */
 export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler {
-  const facilitatorUrl = cfg.STUPID_UPLOAD_FACILITATOR_URL ?? "";
   const network = cfg.STUPID_UPLOAD_PAYMENT_NETWORK;
   const payTo = cfg.STUPID_UPLOAD_PAYMENT_ADDRESS ?? "";
 
-  const facilitatorClient = new HTTPFacilitatorClient({ url: facilitatorUrl });
+  const facilitatorClient = buildFacilitator(cfg);
 
   const resourceServer = new x402ResourceServer(facilitatorClient).register(
     network as `${string}:${string}`,
