@@ -118,6 +118,22 @@ Sepolia paid flow was already validated live (see Change Log).
   Base-mainnet account, a reachable mainnet facilitator, and
   `STUPID_UPLOAD_PAYMENT_ADDRESS`).
 
+- **Deployed** the pricing/OpenAPI/docs fix to production
+  (`upload.stupidtech.net`) and re-verified live. On enabling the paid tier, the
+  production Worker exposed a **real footgun in `z.coerce.boolean()`**: setting
+  `STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED=false`… actually coerced to `true`
+  (any non-empty string is `Boolean`-truthy), so the flag could never be turned
+  off once present. `src/config.ts` now uses a string-safe `boolField()`
+  (parses `true/1/false/0`, else default) and `test/config.test.ts` guards it.
+- **Mainnet paid tier blocker (material):** `https://x402.org/facilitator`
+  only supports EVM on **Base Sepolia (`eip155:84532`)** — its `/supported`
+  list has no `eip155:8458` (Base mainnet) `exact`/`upto`/`batch-settlement`
+  kind. Enabling against it returned `500 RouteConfigurationError: Facilitator
+  does not support scheme exact on network eip155:8453`. The paid tier is
+  therefore still gated off (`501`) until a facilitator that settles on Base
+  mainnet is available (self-hosted or otherwise). The build is fully wired;
+  only the network-backed facilitator + a funded recipient are missing.
+
 ### 2026-09-01
 
 - Phase 4: wired the x402 permanent payment middleware (`src/payment.ts`) into

@@ -25,6 +25,23 @@ export const LIMITS = {
 /** Validated plain configuration values (variables, not bindings). */
 export type WorkerConfig = z.infer<typeof ConfigSchema>;
 
+/**
+ * Boolean coercion that is string-safe. z.coerce.boolean() maps any non-empty
+ * string (including "false") to `true` via JS Boolean(). This helper treats
+ * "true"/"1"/"1" and "false"/"0" explicitly and returns `def` otherwise, so
+ * operators can reliably flip a flag with a string without a surprise.
+ */
+function boolField(def: boolean) {
+  return z.preprocess((v) => {
+    if (typeof v === "boolean") return v;
+    if (v === undefined) return def;
+    const s = String(v).trim().toLowerCase();
+    if (s === "true" || s === "1") return true;
+    if (s === "false" || s === "0") return false;
+    return def;
+  }, z.boolean());
+}
+
 const ConfigSchema = z.object({
   STUPID_UPLOAD_BASE_URL: z.string().url().default("https://upload.stupidtech.net"),
   STUPID_UPLOAD_FILES_HOST: z.string().url().optional(),
@@ -62,7 +79,7 @@ const ConfigSchema = z.object({
     .positive()
     .default(LIMITS.pendingLifetimeSeconds),
   /** Testing escape hatch: allow permanent reservations without x402. */
-  STUPID_UPLOAD_ALLOW_UNPAID_PERMANENT: z.coerce.boolean().default(false),
+  STUPID_UPLOAD_ALLOW_UNPAID_PERMANENT: boolField(false),
   /** Per-source per-minute feedback burst cap. */
   STUPID_UPLOAD_FEEDBACK_PER_MINUTE_LIMIT: z.coerce
     .number()
@@ -71,7 +88,7 @@ const ConfigSchema = z.object({
     .default(LIMITS.feedbackPerMinuteLimit),
   // --- x402 permanent pricing -------------------------------------------------
   /** Enable the x402 payment middleware on the permanent upload route. */
-  STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED: z.coerce.boolean().default(false),
+  STUPID_UPLOAD_PERMANENT_PAYMENT_ENABLED: boolField(false),
   /** x402 facilitator base URL (its /verify /settle /supported endpoints). */
   STUPID_UPLOAD_FACILITATOR_URL: z.string().url().optional(),
   /** Payment network, e.g. Base Sepolia eip155:84532 (test) or Base eip155:8453. */
