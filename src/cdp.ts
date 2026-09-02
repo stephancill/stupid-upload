@@ -21,7 +21,6 @@ async function authHeadersFor(
   });
   return {
     authorization: `Bearer ${jwt}`,
-    "content-type": "application/json",
   };
 }
 
