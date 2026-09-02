@@ -53,12 +53,12 @@ route. Repeats return the existing reservation without consuming quota.
 
 ## CLI
 
-The CLI (`scripts/stupid-upload.ts`) emits stable JSON. Paid path without a
-key builds the exact x402 payment via `submit-exact.ts` (a capturing signer
-derives the EIP-3009 typed-data), asks the wallet to sign it via txlink
-`wallet_sign` (type `0x01`, account substitution), then submits the replaced
-signature + payer as `PAYMENT-SIGNATURE` to settle. Set
-`STUPID_UPLOAD_PRIVATE_KEY` to sign + settle automatically instead. Successful
-uploads are recorded in a local registry (`STUPID_UPLOAD_STATE_FILE`, default
-`~/.stupid-upload/uploads.json`, mode `0600`): `list` shows them (no tokens)
-and `delete <id>` uses the recorded delete token automatically.
+The CLI is the `stupid-upload` npm package (`npm i -g stupid-upload`). It emits
+stable JSON. The paid path without a key builds the exact EIP-3009 payment via
+the `@x402/evm` scheme, asks the wallet to sign via txlink `wallet_sign`
+(type `0x01`, account substitution), then submits the replaced signature +
+payer as `PAYMENT-SIGNATURE`. Set `STUPID_UPLOAD_PRIVATE_KEY` to sign + settle
+automatically instead. Successful uploads are recorded in a local registry
+(`STUPID_UPLOAD_STATE_FILE`, default `~/.stupid-upload/uploads.json`, mode
+0600): `list` shows them (no tokens) and `delete <id>` uses the recorded delete
+token automatically.

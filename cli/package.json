@@ -1,0 +1,38 @@
+{
+  "name": "stupid-upload",
+  "version": "0.7.0",
+  "description": "CLI for the Stupid Upload service: quote, upload (temp/free or permanent/x402 paid), status, list, download, delete, and feedback. Node.",
+  "keywords": [
+    "agent",
+    "cloudflare",
+    "file-sharing",
+    "r2",
+    "upload",
+    "x402"
+  ],
+  "license": "MIT",
+  "bin": {
+    "stupid-upload": "./dist/stupid-upload.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@x402/core": "^2.24.0",
+    "@x402/evm": "^2.24.0",
+    "@x402/fetch": "^2.24.0",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

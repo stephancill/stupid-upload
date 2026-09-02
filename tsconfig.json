@@ -17,5 +17,5 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "skills/**/*.ts", "wrangler.jsonc", "worker-configuration.d.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "cli/**/*.ts", "wrangler.jsonc", "worker-configuration.d.ts"]
 }

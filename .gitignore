@@ -10,3 +10,4 @@ worker-configuration.d.ts
 !.env.example
 *.skill
 .stupid-upload/
+cli/dist/

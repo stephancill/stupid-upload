@@ -1,16 +1,18 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // @ts-nocheck  (tool entrypoint; typechecked tests cover the contract)
-// Stupid Upload CLI.
+// Stupid Upload CLI (Node).
 // Stable JSON to stdout; structured errors to stderr; documented exit codes.
 //
 // Paid uploads: with a private key we sign + settle via @x402. When no key is
 // set, `upload --permanent` drives the canonical @x402 payment through a
-// capturing signer, asks a human wallet to sign the exact Permit2 witness via
-// txlink (EIP-7871), then submits the real signature as PAYMENT-SIGNATURE to
-// settle. The whole no-key flow completes end-to-end in one command.
+// capturing signer, asks a human wallet to sign the exact EIP-3009 transfer via
+// txlink (wallet_sign / eth_signTypedData_v4), then submits the real signature
+// as PAYMENT-SIGNATURE to settle. The whole no-key flow completes end-to-end in
+// one command.
 import { createHash } from "node:crypto";
 import { readFile, writeFile, rename, access } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createTxlinkRequest,
   pollTxlinkRequest,
@@ -545,13 +547,9 @@ async function cmdDownload(url: string, output: string, force: boolean): Promise
   return { ok: true, command: "download", wrote: output, bytes: buf.byteLength };
 }
 
-declare global {
-  interface ImportMeta {
-    readonly main?: boolean;
-  }
-}
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-if (import.meta.main) {
+if (isMain) {
   main().catch((e) => {
     process.stderr.write(
       JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }) + "\n",

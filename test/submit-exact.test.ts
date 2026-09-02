@@ -5,7 +5,7 @@ import {
   captureExact,
   DEFAULT_MAX_PRICE_USD,
   encodePaymentSignatureHeader,
-} from "../skills/stupid-upload/scripts/submit-exact";
+} from "../cli/src/submit-exact";
 
 const PAYER = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SIG = `0x${"bb".repeat(65)}` as `0x${string}`;

@@ -48,17 +48,19 @@ bun install
 
 ## CLI & agent skill
 
-A self-contained CLI + skill ships under `skills/stupid-upload`:
+A Node CLI is published on npm as `stupid-upload` (source in `cli/`) and a
+self-contained agent skill ships under `skills/stupid-upload`:
 
 ```sh
-bun skills/stupid-upload/scripts/stupid-upload.ts quote ./file
-bun skills/stupid-upload/scripts/stupid-upload.ts upload ./file --temporary
+npm i -g stupid-upload
+stupid-upload quote ./file
+stupid-upload upload ./file --temporary
 ```
 
 See `docs/cli.md` and the skill's `SKILL.md`/`references/api.md`. The paid
-`upload --permanent` path returns a **txlink signature request URL** when no
-private key is configured, so an agent without a signer can route approval to
-a human and poll for the result.
+`upload --permanent` path signs via txlink (`wallet_sign` with account
+substitution) when no private key is configured, routing approval to a human
+wallet and settling automatically.
 
 ## Local dev
 

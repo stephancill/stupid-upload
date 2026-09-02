@@ -20,10 +20,23 @@ are paid with Base USDC via x402.
 - For product feedback → **feedback** (`--category`, `--message`, optional
   `--rating`). Never echo secrets into the message.
 
+## Requisites
+
+This skill uses the **`stupid-upload` npm CLI**. Ensure it is installed before
+invoking it (or rely on an agent runtime that provides it):
+
+```sh
+npm i -g stupid-upload     # or: npx stupid-upload ...
+```
+
+The CLI is a single Node binary; it records your uploads in
+`~/.stupid-upload/uploads.json` so you can `list` and `delete <id>` without
+digging for tokens. The raw HTTP contract lives in `references/api.md` if you
+need to call the API directly.
+
 ## Flow
 
-Use the bundled CLI (see `scripts/stupid-upload.ts`) or the raw HTTP API in
-`references/api.md`. Input a `->` tag to a command is fine, e.g.:
+Use the CLI (or the raw HTTP API in `references/api.md`). For example:
 
 ```sh
 stupid-upload quote ./report.pdf
@@ -31,24 +44,21 @@ stupid-upload upload ./report.pdf --temporary
 stupid-upload upload ./report.pdf --permanent
 ```
 
-## Paid uploads & txlink
+## Paid uploads
 
 `upload --permanent` first fetches an exact x402 `402` challenge for the
-file's size. Then, when a key is available, the CLI signs locally; this paid
-local-signing path is a later E2E and not yet finished the CLI. When **no
-private key** is configured, `upload --permanent` creates a **txlink stored
-request** and returns:
+file's size.
 
-```json
-{
-  "status": "awaitingSignature",
-  "signatureRequest": { "url": "https://txlink.stupidtech.net/...", "statusUrl": "..." }
-}
-```
+- If `STUPID_UPLOAD_PRIVATE_KEY` is set, the CLI signs and pays locally.
+- Without a key, the CLI drives the EIP-3009 payment through a capturing
+  signer, asks a wallet to sign the transfer via **txlink** (`wallet_sign` with
+  account substitution), then submits the `PAYMENT-SIGNATURE`. It prints one
+  `approvalRequired` JSON line to **stderr** (with the approval url) and waits
+  (bounded by `STUPID_UPLOAD_SIGN_TIMEOUT_MS`); after the wallet approves it
+  completes the upload in one invocation.
 
-Send `signatureRequest.url` to the user's wallet to approve; poll `statusUrl`
-for completion. After the signature is returned you can re-run the same upload
-with the same `Idempotency-Key` to pick up the funded slot without a re-pay.
+A run interrupted after settlement can be retried with the same
+`Idempotency-Key` to pick up the funded slot without re-paying.
 
 ## Secrets & hygiene
 

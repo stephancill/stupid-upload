@@ -10,7 +10,7 @@ import {
   registryFile,
   removeRecord,
   type UploadRecord,
-} from "../skills/stupid-upload/scripts/registry";
+} from "../cli/src/registry";
 
 let dir = "";
 const base: UploadRecord = {

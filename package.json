@@ -5,15 +5,16 @@
   "type": "module",
   "description": "Accountless, agent-first public file upload service on Cloudflare",
   "bin": {
-    "stupid-upload": "./skills/stupid-upload/scripts/stupid-upload.ts"
+    "stupid-upload": "./cli/dist/stupid-upload.mjs"
   },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply stupid-upload --local",
     "db:migrate": "wrangler d1 migrations apply stupid-upload",
-    "lint": "oxlint src test skills",
-    "format": "oxfmt src test skills",
+    "build:cli": "node cli/scripts/build.mjs",
+    "lint": "oxlint src test cli",
+    "format": "oxfmt src test cli",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260828.1",
     "@types/node": "^26.4.0",
+    "esbuild": "^0.28.2",
     "oxfmt": "0.64.0",
     "oxlint": "1.79.0",
     "typescript": "7.0.2",

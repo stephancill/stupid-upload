@@ -2,13 +2,8 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  cmdTemporaryUpload,
-  cmdPermanentUpload,
-  cmdDelete,
-  cmdList,
-} from "../skills/stupid-upload/scripts/stupid-upload";
-import { buildX402Fetcher } from "../skills/stupid-upload/scripts/pay";
+import { cmdTemporaryUpload, cmdPermanentUpload, cmdDelete, cmdList } from "../cli/src/cli";
+import { buildX402Fetcher } from "../cli/src/pay";
 
 process.env.STUPID_UPLOAD_BASE_URL = "https://api.test";
 process.env.TXLINK_BASE_URL = "https://txlink.test";

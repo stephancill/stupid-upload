@@ -1,19 +1,26 @@
 # Stupid Upload — CLI
 
-The `stupid-upload` CLI is a deterministic JSON tool bundled in the
-self-contained skill at `skills/stupid-upload`. It's invoked with bun
-(`scripts/stupid-upload.ts`) and emits stable JSON to stdout. Structured
-errors go to stderr with a documented exit code, so agents can parse output
-without scraping prose.
+The `stupid-upload` CLI is a deterministic JSON tool published to npm as the
+`stupid-upload` package (Node ≥18) and also lives at `cli/` in this repository.
+It emits stable JSON to stdout; structured errors go to stderr with a
+documented exit code, so agents can parse output without scraping prose.
 
-## Install
+## Install / run
 
-The skill is self-contained; from the skill directory run with bun:
+From npm (recommended):
 
 ```sh
-bun ./scripts/stupid-upload.ts <command>
-# or, from an environment where it's on PATH:
+npm i -g stupid-upload
 stupid-upload <command>
+# or, without installing:
+npx stupid-upload <command>
+```
+
+From the repository:
+
+```sh
+cd cli && npm run build     # bundles to cli/dist/stupid-upload.mjs
+node ./dist/stupid-upload.mjs <command>
 ```
 
 ## Environment
@@ -75,11 +82,11 @@ the cap. Default cap is the v1 maximum ($0.2085).
   - with `STUPID_UPLOAD_PRIVATE_KEY` set, signs + pays via `@x402/fetch`'s
     `wrapFetchWithPayment` and returns the settled reservation in one call;
   - without a key, the CLI builds the exact x402 payment via the **submit
-    seam** (`submit-exact.ts`). It captures the Permit2 witness typed-data the
-    `@x402/evm` scheme wants signed, asks a human wallet to sign it over txlink
-    (EIP-7871 `wallet_sign`, no payer address pre-committed), then splices the
-    returned signature + `account` into the payload and re-POSTs it as the
-    `PAYMENT-SIGNATURE` header so the CDP facilitator settles `exact`. You
+    seam** (`cli/src/submit-exact.ts`): it drives the `@x402/evm` scheme, asks a
+    wallet to sign the EIP-3009 transfer over txlink (`wallet_sign`, account
+    substitution), then splices the returned signature + `account` into the
+    payload and re-POSTs it as the `PAYMENT-SIGNATURE` header so the
+    facilitator settles `exact`. You
     approve the payment in your wallet; the command then completes the
     upload and prints the reservation. It prints a structured
     `approvalRequired` JSON line to **stderr** with the wallet URL, then polls
