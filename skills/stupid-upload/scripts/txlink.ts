@@ -60,10 +60,13 @@ export async function pollTxlinkRequest(statusUrl: string): Promise<RequestStatu
 
 /** Human-readable line describing what the request asks the wallet to do. */
 export function describeRequest(options: SignatureRequestOptions): string {
-  const what = options.method.startsWith("eth_signTypedData")
-    ? "a typed-data payment signature"
-    : options.method.startsWith("eth_sendTransaction")
-      ? "a payment approval/transaction"
-      : options.method;
+  const what =
+    options.method === "wallet_sign"
+      ? "an EIP-712 x402 Permit2 payment signature (no fixed address)"
+      : options.method.startsWith("eth_signTypedData")
+        ? "a typed-data payment signature"
+        : options.method.startsWith("eth_sendTransaction")
+          ? "a payment approval/transaction"
+          : options.method;
   return `${what} on chain ${options.chainId}.`;
 }

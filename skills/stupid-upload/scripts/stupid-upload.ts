@@ -7,7 +7,7 @@
 // funded local path needs a live facilitator and is a later E2E). When no key
 // is set, upload --permanent creates a txlink stored request and returns its
 // url + statusUrl so a human can approve the payment signature.
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile, writeFile, rename, access } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -209,9 +209,11 @@ async function cmdPermanentUpload(file: string, contentType?: string): Promise<u
   const chainId = evmChainId(accept?.network);
 
   const sigOptions: SignatureRequestOptions = {
-    method: "eth_signTypedData_v4",
+    method: "wallet_sign",
     chainId,
-    params: { typedData: x402TypedData(accept?.amount, accept?.payTo, chainId) },
+    // EIP-7871 wallet_sign: no address is pre-committed; txlink substitutes the
+    // connected wallet. The typed-data is the exact Perm2 payment (address-free).
+    params: { version: "1.0", request: { type: "0x01", data: permit2TypedData(accept, chainId) } },
   };
   const sig: SignatureRequest = await createTxlinkRequest(sigOptions);
   return {
@@ -228,21 +230,36 @@ async function cmdPermanentUpload(file: string, contentType?: string): Promise<u
   };
 }
 
-function x402TypedData(
-  amount: string | undefined,
-  payTo: string | undefined,
-  chainId: number,
-): Record<string, unknown> {
+const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+
+/**
+ * EIP-712 signed data for the x402 exact (Permit2) payment. The signature
+ * commits to `{ permitted, nonce, deadline }` — deliberately no payer address,
+ * so it pairs with EIP-7871 wallet_sign whose connected wallet is substituted.
+ */
+function permit2TypedData(accept: any, chainId: number): Record<string, unknown> {
+  const now = Math.floor(Date.now() / 1000);
+  const deadline = now + (Number(accept?.maxTimeoutSeconds) || 900);
+  const nonce = "0x" + randomBytes(32).toString("hex");
   return {
-    domain: { name: "x402", version: "1", chainId },
+    domain: { name: "PERMIT2", chainId, verifyingContract: PERMIT2_ADDRESS },
     types: {
-      Payment: [
+      PermitTransferFrom: [
+        { name: "permitted", type: "TokenPermissions" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint256" },
+      ],
+      TokenPermissions: [
+        { name: "token", type: "address" },
         { name: "amount", type: "uint256" },
-        { name: "to", type: "address" },
       ],
     },
-    primaryType: "Payment",
-    message: { amount: amount ?? "0", to: payTo ?? "" },
+    primaryType: "PermitTransferFrom",
+    message: {
+      permitted: { token: accept?.asset, amount: accept?.amount ?? "0" },
+      nonce,
+      deadline,
+    },
   };
 }
 

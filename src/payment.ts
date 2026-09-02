@@ -18,6 +18,65 @@ export function isPermanentPaymentEnabled(cfg: WorkerConfig): boolean {
   return Boolean(cfg.STUPID_UPLOAD_FACILITATOR_URL || hasCdp);
 }
 
+/**
+ * Debug instrumentation: logs a structured, non-sensitive reason whenever the
+ * facilitator rejects a payment, so we can diagnose settlement failures (the
+ * protocol middleware otherwise swallows them into a bare `402`). Never logs
+ * signatures, raw payments, or secrets.
+ */
+function instrumentFacilitator(f: HTTPFacilitatorClient): HTTPFacilitatorClient {
+  const client = f as unknown as {
+    verify: (p: unknown, r: unknown) => Promise<{ failure?: unknown; errorReason?: unknown }>;
+    settle: (p: unknown, r: unknown) => Promise<{ failure?: unknown; errorReason?: unknown }>;
+    [k: string]: unknown;
+  };
+  const verify = client.verify.bind(client);
+  const settle = client.settle.bind(client);
+  client.verify = async (payload, reqs) => {
+    try {
+      const res = await verify(payload, reqs);
+      report("verify", res);
+      return res;
+    } catch (e) {
+      reportErr("verify", e);
+      throw e;
+    }
+  };
+  client.settle = async (payload, reqs) => {
+    try {
+      const res = await settle(payload, reqs);
+      report("settle", res);
+      return res;
+    } catch (e) {
+      reportErr("settle", e);
+      throw e;
+    }
+  };
+  return f;
+}
+
+function report(step: string, res: { failure?: unknown; errorReason?: unknown } | undefined): void {
+  const fail = res?.failure ?? res?.errorReason;
+  if (fail !== undefined && fail !== null) {
+    console.error(`[x402] ${step} rejected`, summarize(fail));
+  }
+}
+
+function reportErr(step: string, e: unknown): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error(`[x402] ${step} threw`, summarize(msg));
+}
+
+/** Keep rejections short + safe (truncate; no raw payloads). */
+function summarize(v: unknown): string {
+  if (typeof v === "string") return v.slice(0, 2000);
+  try {
+    return JSON.stringify(v).slice(0, 2000);
+  } catch {
+    return String(v).slice(0, 2000);
+  }
+}
+
 /** Exact dollar string a client must pay for a permanent upload of a size. */
 export function priceDollar(sizeBytes: number): string {
   return `${pricePermanentUsd(Math.max(0, Math.floor(sizeBytes)))}`;
@@ -46,7 +105,7 @@ export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler
   const network = cfg.STUPID_UPLOAD_PAYMENT_NETWORK;
   const payTo = cfg.STUPID_UPLOAD_PAYMENT_ADDRESS ?? "";
 
-  const facilitatorClient = buildFacilitator(cfg);
+  const facilitatorClient = instrumentFacilitator(buildFacilitator(cfg));
 
   const resourceServer = new x402ResourceServer(facilitatorClient).register(
     network as `${string}:${string}`,
