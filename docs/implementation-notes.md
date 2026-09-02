@@ -134,6 +134,10 @@ Completed in this pass (2026-09-02):
   skill to require that exact version, and verified a clean registry install.
 - Deployed the timeout change and verified production returns an exact
   Base-mainnet `402` challenge with `maxTimeoutSeconds: 3600`.
+- Replaced the API-oriented root page with minimal one-command CLI usage for
+  temporary and permanent uploads, plus a browser interface for free temporary
+  uploads. Added static favicon/Open Graph assets and social metadata while
+  keeping `/docs` and machine discovery unchanged.
 
 ### 2026-09-02 (Node CLI package)
 

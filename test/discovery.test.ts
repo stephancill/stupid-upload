@@ -25,6 +25,14 @@ describe("discovery endpoints", () => {
     const res = await app.request("/", {}, W);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("<title>stupid upload</title>");
+    expect(html).toContain("<h1>stupid upload</h1>");
+    expect(html).toContain('id="upload-form"');
+    expect(html).toContain('fetch("/v1/uploads/temporary"');
+    expect(html).toContain("npx --yes stupid-upload@0.0.2 upload ./file");
+    expect(html).toContain('property="og:image"');
+    expect(html).toContain('href="/favicon.png"');
   });
 
   it("serves /docs", async () => {

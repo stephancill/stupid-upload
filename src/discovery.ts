@@ -573,16 +573,82 @@ const x402WellKnown = {
 
 export function registerDiscovery(): void {
   app.get("/", (c) => {
-    const w = loadConfig({ ...c.env });
-    const body = `<h1>Stupid Upload</h1>
-<p>Accountless, agent-first public file uploads. Temporary files expire 24 hours after upload. Permanent files have <strong>no scheduled expiration</strong> and are paid with Base USDC via x402 (subject to uploader deletion, abuse/legal removal, and service availability).</p>
-<h2>Limits</h2><ul>
-<li>Temporary: free, &le;1&nbsp;MiB, 20&nbsp;MiB/day/source.</li>
-<li>Permanent: $0.01 flat + $0.002 per additional started MiB after the first, &le;100&nbsp;MiB (max $0.208).</li>
-</ul>
-<h2>Quick start</h2><pre>curl -sS '${w.STUPID_UPLOAD_BASE_URL}/v1/pricing?sizeBytes=1234'</pre>
-<p><a href="/docs">Docs</a> &middot; <a href="/openapi.json">OpenAPI</a> &middot; <a href="/llms.txt">llms.txt</a></p>`;
-    return c.html(page("Stupid Upload", body));
+    const body = `<h1>stupid upload</h1>
+<p><strong>One-command file uploads.</strong></p>
+<p>An agent-friendly interface for free temporary uploads and paid long-term uploads.</p>
+<h2>Upload a file</h2>
+<p>Browser uploads are free up to 1 MiB and expire after 24 hours.</p>
+<form id="upload-form"><input id="file" name="file" type="file" required><button type="submit">Upload</button></form>
+<p id="upload-status" role="status" aria-live="polite"></p>
+<p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
+<h2>From an agent</h2>
+<pre><code>npx --yes stupid-upload@0.0.2 upload ./file</code></pre>
+<h2>Long-term from an agent</h2>
+<p>Paid with Base USDC via x402. Up to 100 MiB, with no scheduled expiration.</p>
+<pre><code>npx --yes stupid-upload@0.0.2 upload ./file --permanent</code></pre>
+<p><a href="https://www.npmjs.com/package/stupid-upload">npm</a> &middot; <a href="/docs">API docs</a> &middot; <a href="https://github.com/stephancill/stupid-upload">source</a></p>
+<script type="module">
+const form = document.querySelector("#upload-form");
+const input = document.querySelector("#file");
+const status = document.querySelector("#upload-status");
+const result = document.querySelector("#upload-result");
+const link = document.querySelector("#upload-link");
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 1048576) {
+    status.textContent = "Temporary uploads are limited to 1 MiB.";
+    return;
+  }
+
+  form.querySelector("button").disabled = true;
+  result.hidden = true;
+  status.textContent = "Uploading...";
+
+  try {
+    const bytes = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const reserved = await fetch("/v1/uploads/temporary", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": crypto.randomUUID().replaceAll("-", ""),
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+        sha256,
+      }),
+    });
+    const reservation = await reserved.json();
+    if (!reserved.ok) throw new Error(reservation.error?.message || "Could not reserve upload.");
+
+    const uploaded = await fetch(reservation.uploadUrl, {
+      method: "PUT",
+      headers: {
+        authorization: "Bearer " + reservation.uploadToken,
+        "content-type": "application/octet-stream",
+      },
+      body: file,
+    });
+    if (uploaded.status !== 201) throw new Error("Could not upload file.");
+
+    link.href = reservation.publicUrl;
+    link.textContent = reservation.publicUrl;
+    result.hidden = false;
+    status.textContent = "Upload complete. This link expires 24 hours after upload.";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "Upload failed.";
+  } finally {
+    form.querySelector("button").disabled = false;
+  }
+});
+</script>`;
+    return c.html(page("stupid upload", body));
   });
 
   app.get("/docs", (c) => {
@@ -629,6 +695,9 @@ bearer-like; a deleted/expired object returns 410 Gone.
 }
 
 function page(title: string, body: string): string {
+  const description =
+    "An agent-friendly interface for free temporary uploads and paid long-term uploads.";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
-<style>body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.6}code,pre{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}pre{padding:1rem;overflow:auto}</style></head><body>${body}</body></html>`;
+<meta name="description" content="${description}"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:type" content="website"><meta property="og:url" content="https://upload.stupidtech.net"><meta property="og:image" content="https://upload.stupidtech.net/og.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/png" href="/favicon.png">
+<style>body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.6}code,pre{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}pre{padding:1rem;overflow:auto}form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}input,button{font:inherit}button{padding:.25rem .75rem}</style></head><body>${body}</body></html>`;
 }

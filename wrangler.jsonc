@@ -11,6 +11,9 @@
   "observability": {
     "enabled": true
   },
+  "assets": {
+    "directory": "./public"
+  },
   "vars": {
     "STUPID_UPLOAD_BASE_URL": "https://upload.stupidtech.net",
     "STUPID_UPLOAD_FILES_HOST": "https://upload.stupidtech.net",
