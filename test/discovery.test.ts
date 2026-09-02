@@ -42,7 +42,7 @@ describe("discovery endpoints", () => {
     expect(html).toContain('name="retention" value="perm"');
     expect(html).toContain('name="retention" value="temp"');
     expect(html).toContain('src="/app.js"');
-    expect(html).toContain('src="/qrcode-generator.js"');
+    expect(html).not.toContain("qrcode-generator");
     expect(html).toContain('id="wallet-qr"');
     expect(html).toContain("npx --yes stupid-upload upload ./file");
     expect(html).toContain('id="upload-form"');

@@ -34,26 +34,14 @@ function parseTxResult(result) {
   };
 }
 
-function renderQr(text) {
-  const qr = qrcode(0, 'M');
-  qr.addData(text);
-  qr.make();
-  const size = qr.getModuleCount();
-  const cell = 4;
-  const scale = cell * 3;
-  const canvas = document.createElement('canvas');
-  canvas.width = size * cell + scale * 2;
-  canvas.height = size * cell + scale * 2;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#000';
-  for (let row = 0; row < size; row += 1) {
-    for (let col = 0; col < size; col += 1) {
-      if (qr.isDark(row, col)) ctx.fillRect(col * cell + scale, row * cell + scale, cell, cell);
-    }
-  }
-  walletQr.replaceChildren(canvas);
+function renderQr(qrDataUri) {
+  walletQr.replaceChildren();
+  const img = document.createElement('img');
+  img.src = qrDataUri;
+  img.alt = 'QR code to approve the payment';
+  img.width = 180;
+  img.height = 180;
+  walletQr.appendChild(img);
 }
 
 function showResult(url, message) {
@@ -125,7 +113,7 @@ form.addEventListener('submit', async (event) => {
     })).json();
     if (!pay.typedData || !pay.accepted) throw new Error('Could not quote payment.');
 
-    const sigReq = await (await fetch('https://txlink.stupidtech.net/api/requests', {
+    const sigReq = await (await fetch('https://txlink.stupidtech.net/api/requests?qr=svg', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -138,7 +126,7 @@ form.addEventListener('submit', async (event) => {
     wallet.hidden = false;
     walletLink.href = sigReq.url;
     status.textContent = 'Approve the payment in your wallet (or scan the QR), then this page completes the upload.';
-    renderQr(sigReq.url);
+    renderQr(sigReq.qr);
 
     let resolution = null;
     for (let i = 0; i < 150; i += 1) {
@@ -169,8 +157,25 @@ form.addEventListener('submit', async (event) => {
       },
       body: JSON.stringify(meta),
     });
+    if (!signed.ok) {
+      // The x402 middleware returns 402 with the facilitator's reason in the
+      // PAYMENT-REQUIRED header (e.g. CDP "invalid_exact_evm_payload_signature").
+      const prHeader = signed.headers.get('payment-required');
+      let reason = null;
+      if (prHeader) {
+        try {
+          const pr = JSON.parse(atob(prHeader));
+          reason = pr.error || null;
+        } catch {
+          /* ignore non-JSON header */
+        }
+      }
+      const body = await signed.json().catch(() => null);
+      throw new Error(
+        reason || body?.error?.message || 'Payment was not accepted. See the PAYMENT-REQUIRED header for the reason.',
+      );
+    }
     const reservation = await signed.json();
-    if (!signed.ok) throw new Error(reservation.error?.message || 'Payment was not accepted.');
 
     status.textContent = 'Uploading...';
     const uploaded = await fetch(reservation.uploadUrl, {

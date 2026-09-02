@@ -596,7 +596,6 @@ export function registerDiscovery(): void {
 <p>Paid with Base USDC via x402. Up to 100 MiB, no scheduled expiration.</p>
 <pre><code>npx --yes stupid-upload upload ./file --permanent</code></pre>
 <p><a href="https://github.com/stephancill/stupid-upload">github</a> - <a href="https://x.com/stephancill">twitter</a> - <a href="https://stupidtech.net">stupidtech.net</a> - <a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">skill</a></p>
-<script src="/qrcode-generator.js"></script>
 <script src="/app.js"></script>`;
     return c.html(page("stupid upload", body));
   });

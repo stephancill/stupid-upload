@@ -137,9 +137,13 @@ Completed in this pass (2026-09-02):
 - Added webpay capture + HTTP tests (tests: 72 total).
 - Moved the landing page client logic to a same-origin `/app.js` (CSP
   `script-src 'self'`), added tolerant parsing of the txlink signature result
-  (accepts both a JSON string and a pre-parsed object — the string-parse of an
-  object caused the `"[object Object]" is not valid JSON` failure), and added a
-  scannable QR (from `/qrcode-generator.js`) for the wallet approval URL.
+  (accepts both a JSON string and a pre-parsed object — a JSON-parse of an
+  object caused the `"[object Object]" is not valid JSON` failure), and now
+  render the wallet-approval QR from txlink's own `?qr=svg` data-URI endpoint
+  instead of shipping a QR library (removed `public/qrcode-generator.js`).
+- The paid browser flow now surfaces the facilitator's real rejection reason
+  (decoded from the `PAYMENT-REQUIRED` 402 header) rather than a generic
+  "Payment was not accepted", so CDP/user-funding failures are actionable.
 
 ### 2026-09-02 (CLI 0.0.2)
 
