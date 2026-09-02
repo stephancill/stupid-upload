@@ -137,7 +137,8 @@ Completed in this pass (2026-09-02):
 - Replaced the API-oriented root page with minimal one-command CLI usage for
   temporary and permanent uploads, plus a browser interface for free temporary
   uploads. Added static favicon/Open Graph assets and social metadata while
-  keeping `/docs` and machine discovery unchanged.
+  keeping `/docs` and machine discovery unchanged. Linked the repository agent
+  skill directly from the page.
 
 ### 2026-09-02 (Node CLI package)
 

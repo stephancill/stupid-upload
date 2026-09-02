@@ -583,6 +583,7 @@ export function registerDiscovery(): void {
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
 <h2>From an agent</h2>
 <pre><code>npx --yes stupid-upload@0.0.2 upload ./file</code></pre>
+<p><a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">Agent skill</a></p>
 <h2>Long-term from an agent</h2>
 <p>Paid with Base USDC via x402. Up to 100 MiB, with no scheduled expiration.</p>
 <pre><code>npx --yes stupid-upload@0.0.2 upload ./file --permanent</code></pre>

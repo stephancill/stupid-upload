@@ -31,6 +31,7 @@ describe("discovery endpoints", () => {
     expect(html).toContain('id="upload-form"');
     expect(html).toContain('fetch("/v1/uploads/temporary"');
     expect(html).toContain("npx --yes stupid-upload@0.0.2 upload ./file");
+    expect(html).toContain("/tree/main/skills/stupid-upload");
     expect(html).toContain('property="og:image"');
     expect(html).toContain('href="/favicon.png"');
   });
