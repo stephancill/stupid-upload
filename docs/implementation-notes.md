@@ -16,6 +16,12 @@ with a Vitest suite (70 tests).
 Deployed to production behind `https://upload.stupidtech.net` (D1 + R2
 provisioned, migrations applied, secrets set).
 
+Preview-card branding (2026-09-02): re-rendered `public/og.png` (1200×630,
+RGB) so the Stupid "ST" logo fills the card instead of a tiny mark on empty
+white — it now reads clearly in the small square link-summary preview. Added
+explicit Open Graph image dimensions/type and `twitter:card`/`twitter:image`
+tags in `page()` so Twitter serves the logo reliably.
+
 Completed in this pass (2026-09-02):
 - **Phase 5** — OpenAPI hardened (full component schemas, download + feedback
   operations, `402` header, `x-bazaar` examples, drift-guard tests) and the
