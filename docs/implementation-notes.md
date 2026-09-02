@@ -88,6 +88,32 @@ Completed in this pass (2026-09-02):
 
 ## Change Log
 
+### 2026-09-02 (live mainnet)
+
+- **First live Base-mainnet settlement — PASSED.** Through knox + the CDP
+  facilitator, paid the real $0.01 (10,000 USDC) for an 800-byte permanent
+  upload; the server returned a `201` permanent reservation
+  (`expiresAt: null`, `priceAtomic: 10000`, `paymentNetwork: eip155:8453`), then
+  the full E2E passed on production: `PUT 201` → download bytes match →
+  status `ready` → `DELETE 200` → `410`. Phase 9 (live paid tier) is validated.
+- **Root cause found + fixed (a real CDP-integration bug):** the CDP facilitator
+  rejected our verify requests with `header Content-Type has unexpected
+  value` — because we set `content-type` inside `createAuthHeaders`. CDP wants
+  that header set only by the `HTTPFacilitatorClient` itself. Removed our
+  `content-type` from the CDP auth headers; settlement now clears. Verified
+  against the CDP API directly (content-type accepted ⇒ schema validation ⇒
+  real settlement).
+- Also added `src/payment.ts` debug instrumentation (`instrumentFacilitator`)
+  that logs a short, non-sensitive reason when a CDP verify/settle is rejected
+  (the protocol otherwise swallows it into a bare `402`) — surfaced this bug.
+- **EIP-7871 `wallet_sign` signing round-trip validated** for the no-key CLI
+  path: txlink returns `{ signature, message, account }` (account now emitted).
+  EIP-7871 is the address-substitution method that replaces the broken
+  `eth_signTypedData_v4`-needs-address call. (Signing round-trip works; the
+  no-key path still needs a **submit helper** to turn the returned signature+
+  account into a settlement — the actual settlement is currently done in-repo
+  via knox/the client.)
+
 ### 2026-09-02 (late)
 
 - **Paid tier is LIVE on Base mainnet (Phase 9, challenge side).** Switched the
