@@ -16,6 +16,11 @@ with a Vitest suite (70 tests).
 Deployed to production behind `https://upload.stupidtech.net` (D1 + R2
 provisioned, migrations applied, secrets set).
 
+Wallet-prompt cleanup (2026-09-02): after a `wallet_sign` completes, the
+browser UI now hides the whole `#wallet-result` approval block (QR + text)
+instead of only the QR, so "Approve the payment in your wallet…" no longer
+lingers on the page after confirmation.
+
 Preview-card branding (2026-09-02): re-rendered `public/og.png` (1200×630,
 RGB) so the Stupid "ST" logo fills the card instead of a tiny mark on empty
 white — paired with `twitter:card=summary`, the centered logo center-crops to a

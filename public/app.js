@@ -215,7 +215,7 @@ form.addEventListener('submit', async (event) => {
       const state = await (await fetch(sigReq.statusUrl)).json();
       if (state.status === 'completed') {
         resolution = parseTxResult(state.result);
-        walletQr.hidden = true;
+        wallet.hidden = true;
         break;
       }
       if (state.status === 'failed') throw new Error('Wallet approval failed.');
