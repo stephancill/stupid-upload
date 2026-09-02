@@ -31,6 +31,7 @@ describe("discovery endpoints", () => {
     expect(html).toContain('id="upload-form"');
     expect(html).toContain('fetch("/v1/uploads/temporary"');
     expect(html).toContain("<h2>From the terminal</h2>");
+    expect(html).toContain("<h2>Long-term storage</h2>");
     expect(html).not.toContain("From an agent");
     expect(html).toContain("npx --yes stupid-upload upload ./file");
     expect(html).not.toContain("stupid-upload@0.0.2");

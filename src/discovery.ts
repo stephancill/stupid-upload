@@ -582,7 +582,7 @@ export function registerDiscovery(): void {
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
 <h2>From the terminal</h2>
 <pre><code>npx --yes stupid-upload upload ./file</code></pre>
-<h2>Long-term from the terminal</h2>
+<h2>Long-term storage</h2>
 <p>Paid with Base USDC via x402. Up to 100 MiB, with no scheduled expiration.</p>
 <pre><code>npx --yes stupid-upload upload ./file --permanent</code></pre>
 <p><a href="https://github.com/stephancill/stupid-upload">github</a> - <a href="https://x.com/stephancill">twitter</a> - <a href="https://stupidtech.net">stupidtech.net</a> - <a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">skill</a></p>
