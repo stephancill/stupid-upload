@@ -112,25 +112,40 @@ export function permanentPaymentMiddleware(cfg: WorkerConfig): MiddlewareHandler
     new ExactEvmScheme(),
   );
 
+  const dynamicPrice: (ctx: { adapter?: { getBody?: () => unknown } }) => Promise<string> = async (
+    ctx,
+  ) => {
+    const raw = ctx.adapter?.getBody ? (ctx.adapter.getBody() as Promise<unknown>) : undefined;
+    const body = (await raw) as { sizeBytes?: unknown } | undefined;
+    const size = Number(body?.sizeBytes);
+    return priceDollar(Number.isFinite(size) ? size : 0);
+  };
+
   const routes = {
     "POST /v1/uploads/permanent": {
-      accepts: {
-        scheme: "exact",
-        network: network as `${string}:${string}`,
-        payTo,
-        // Use an address-free Permit2 witness (not EIP-3009), so no-key clients
-        // can sign the exact payment via EIP-7871 wallet_sign and submit the
-        // resulting `exact` settlement as PAYMENT-SIGNATURE.
-        extra: { assetTransferMethod: "permit2" },
-        price: async (ctx: { adapter?: { getBody?: () => unknown } }) => {
-          const raw = ctx.adapter?.getBody
-            ? (ctx.adapter.getBody() as Promise<unknown>)
-            : undefined;
-          const body = (await raw) as { sizeBytes?: unknown } | undefined;
-          const size = Number(body?.sizeBytes);
-          return priceDollar(Number.isFinite(size) ? size : 0);
+      // Advertise BOTH exact payment methods for the same route so every client
+      // type works:
+      //  1. EIP-3009 (payer-bound) — the default, preferred by keyed clients
+      //     such as knox (`@x402/fetch`) that know their `from` up front.
+      //  2. Permit2 (address-free) — enables the no-key EIP-7871 wallet flow,
+      //     whose signed witness carries no payer address.
+      // Both settle `exact` through the configured facilitator; the price is
+      // dynamic on `sizeBytes` and shared by both options.
+      accepts: [
+        {
+          scheme: "exact",
+          network: network as `${string}:${string}`,
+          payTo,
+          price: dynamicPrice,
         },
-      },
+        {
+          scheme: "exact",
+          network: network as `${string}:${string}`,
+          payTo,
+          extra: { assetTransferMethod: "permit2" },
+          price: dynamicPrice,
+        },
+      ],
       description: "Stores a file with no scheduled expiration, once paid.",
       mimeType: "application/json",
     },

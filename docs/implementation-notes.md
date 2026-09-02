@@ -30,15 +30,16 @@ Completed in this pass (2026-09-02):
   Base USDC). A final live **settlement** (a real `$0.011`-class payment from a
   funded mainnet USDC account) is the one remaining Phase-9 acceptance item.
 - **Phase 10** — deployment/decision log updated (this file).
-- **Payment method: Permit2 (not EIP-3009).** A live probe revealed the deployed
-  permanent route was using the `exact` scheme's **EIP-3009** default
+- **Payment method: EIP-3009 **and** Permit2.** A live probe revealed the deployed
+  permanent route used the `exact` scheme's **EIP-3009** default
   (`TransferWithAuthorization`), which embeds the payer `from` in the signed
   message and therefore cannot be built by an address-free EIP-7871 `wallet_sign`
-  (the payer is only known after signing). To enable the no-key paid upload, the
-  `/v1/uploads/permanent` route now advertises
-  `extra.assetTransferMethod: "permit2"` so both keyed and no-key clients sign
-  the address-free Permit2 witness the CDP facilitator settles. The keyed
-  (`STUPID_UPLOAD_PRIVATE_KEY`) path now also settles via Permit2 witness.
+  (the payer is only known after signing). `/v1/uploads/permanent` now advertises
+  **both** exact methods for the same route: EIP-3009 first (backwards-compatible
+  default preferred by keyed clients such as knox) and a Permit2 option
+  (`extra.assetTransferMethod: "permit2"`) so no-key clients sign the address-free
+  Permit2 witness. The no-key seam (`submit-exact.ts`) deterministically selects
+  the Permit2 option whenever it is offered.
 - **No-key paid upload (submit seam).** The CLI now completes
   `upload --permanent` without a private key: it drives `@x402/evm`'s
   `ExactEvmScheme` with a capturing signer to mint the canonical Permit2

@@ -39,6 +39,19 @@ describe("submit-exact seam", () => {
     expect((payload.payload as any).signature.startsWith("0x")).toBe(true);
   });
 
+  it("prefers the Permit2 option when the route advertises both methods", async () => {
+    const both = {
+      ...paymentRequired,
+      accepts: [
+        { ...paymentRequired.accepts[0], extra: { name: "USD Coin", version: "2" } },
+        { ...paymentRequired.accepts[0], extra: { assetTransferMethod: "permit2" } },
+      ],
+    };
+    const { typedData, accepted } = await captureExact(both);
+    expect(typedData.primaryType).toBe("PermitWitnessTransferFrom");
+    expect(accepted.network).toBe("eip155:84532");
+  });
+
   it("splices the wallet signature + payer and encodes PAYMENT-SIGNATURE", async () => {
     const { payload } = await captureExact(paymentRequired);
     const finalized = applyWalletSignature(payload, { signature: SIG, account: PAYER });

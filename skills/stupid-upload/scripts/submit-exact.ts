@@ -61,17 +61,21 @@ function toPlainJson(v: unknown): unknown {
  * cannot be built without a known payer via `wallet_sign`.
  */
 export async function captureExact(paymentRequired: unknown): Promise<CapturedExact> {
-  const pr = {
-    x402Version: 2,
-    ...(paymentRequired as { x402Version?: number } & Record<string, unknown>),
-  };
-  const networks = Array.from(
-    new Set(
-      ((pr.accepts as Array<Record<string, unknown>> | undefined) ?? []).map(
-        (a) => a.network as string,
-      ),
-    ),
+  const base = (paymentRequired as { x402Version?: number } & Record<string, unknown>) ?? {};
+  // When the route advertises multiple exact payment methods, the no-key path
+  // must deterministically pick the address-free Permit2 option (the EIP-3009
+  // option is payer-bound and unsignable via wallet_sign). Fall back to all
+  // options only when no Permit2 one is offered.
+  const accepts = ((base.accepts as Array<Record<string, unknown>> | undefined) ?? []).map((a) =>
+    a && typeof a === "object" ? a : {},
   );
+  const permitOptions = accepts.filter(
+    (a) => (a.extra as Record<string, unknown> | undefined)?.assetTransferMethod === "permit2",
+  );
+  const available = permitOptions.length > 0 ? permitOptions : accepts;
+  const pr = { x402Version: 2, ...base, accepts: available };
+
+  const networks = Array.from(new Set((available ?? []).map((a) => a.network as string)));
   if (networks.length === 0) {
     throw new Error("the x402 challenge carried no accepted payment requirements");
   }
