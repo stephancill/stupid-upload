@@ -144,6 +144,16 @@ Completed in this pass (2026-09-02):
 - The paid browser flow now surfaces the facilitator's real rejection reason
   (decoded from the `PAYMENT-REQUIRED` 402 header) rather than a generic
   "Payment was not accepted", so CDP/user-funding failures are actionable.
+- **Web payment root cause (2026-09-02 late):** EIP-3009 `TransferWithAuthorization`
+  signatures must be signed by the exact payer address that USDC recovers. For
+  the txlink `wallet_sign` (EIP-7871 account-substitution) flow, the certificate
+  `from` placeholder is replaced at sign time, so `recoverTypedDataAddress(sig)`
+  must equal the payer actually authorized. When it does not — e.g.
+  `invalid_exact_evm_payload_signature` → `invalid_payload: contract call failed:
+  execution reverted` (`FiatTokenV2: invalid signature`) — the settlement returns
+  the facilitator's real reason, now surfaced in the UI. Verified by replaying a
+  completed txlink request: the recorded `account` differed from the signature's
+  recovered address, so USDC rejected the authorization.
 
 ### 2026-09-02 (CLI 0.0.2)
 
