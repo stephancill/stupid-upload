@@ -369,6 +369,93 @@ Index upload status/expiration for scheduled cleanup. Keep expired/deleted tombs
 ## Deferred from v1
 
 - Accounts, dashboards, private files, password protection, custom expirations, custom domains, file replacement, folders, and list APIs.
-- MPP/Tempo payments, Solana payments, cards, subscriptions, bundles, and prepaid balances.
+- MPP/Torch payments, Solana payments, cards, subscriptions, bundles, and prepaid balances.
 - Files over 100 MiB and direct presigned/multipart upload flows.
 - Automated malware scanning and content classification. Launch instead with attachment handling, takedown tooling, quotas, and explicit acceptable-use terms.
+
+## Follow-up: no-key `upload --permanent` submit (handed off)
+
+**Status (2026-09-02):** the live paid tier works end-to-end on Base mainnet via
+a keyed payer (knox / `@x402/fetch`): a real $0.01 settlement, then upload →
+download → delete, was verified in production. What is **not** done is the
+**no-key** `upload --permanent` path actually settling — the CLI can now sign
+the correct message and receive a real EIP-7871 signature + payer `account`
+back from txlink, but it cannot yet turn that signature into a CDP `exact`
+settlement. Hand to an engineer to build the "submit" seam.
+
+### Background facts (verified)
+
+- The `exact` payment is a Permit2-`witness` transfer, **not** a plain permit.
+  In `@x402/evm` the signed type is `PermitWitnessTransferFrom` over the
+  `PERMIT2` domain:
+  - `PermitWitnessTransferFrom = [ permitted(TokenPermissions), spender(address),
+    nonce(uint256), deadline(uint256), witness(Witness) ]`
+  - `TokenPermissions = [ token(address), amount(uint256) ]`,
+    `Witness = [ to(address), validAfter(uint256) ]`
+  - `message = { permitted:{token, amount}, spender, nonce, deadline,
+    witness:{ to: payTo, validAfter } }`
+  - `domain = { name: "PERMIT2", chainId, verifyingContract }`
+    (`PERMIT2_ADDRESS = 0x000000000022D47F00301126dDE24F6a78BA3`; the `spender`
+    is the x402 exact proxy on Base).
+  - Chain base mainnet `eip155:8453`.
+- No payer address is in the signed message, so EIP-7871 `wallet_sign`
+  (`request.type: "0x01"`, omit `address`) lets txlink substitute the connected
+  wallet — this already works, and txlink returns `{ result: { signature,
+  message, account } }`.
+- The server reads the solved payment from a **`PAYMENT-SIGNATURE`** header
+  (JSON → base64), decoded via `decodePaymentSignatureHeader` in `@x402/core`.
+  The final payment is a v2 `PaymentPayload` object (`x402Version: 2` +
+  `payload` + `accepted`).
+- The CLI currently builds `permit2TypedData(...)` in
+  `skills/stupid-upload/scripts/stupid-upload.ts` (already the correct
+  witness struct) and submits the wallet-sign via txlink — but it does **not**
+  construct/submit the `PaymentPayload`.
+- Live knox settlement already proves the server + CDP facilitator accept the
+  canonical `exact` payment.
+
+### The approach (the seam)
+
+1. `@x402/evm`'s `ExactEvmScheme` builds **and signs** the permit in one
+   `createPayment(...)` call. To external-sign without a private key, pass a
+   **capturing signer** `{ address, publicClient, signTypedData(td) }` that
+   returns a unique 65-byte placeholder and records `td` (the exact typed-data,
+   incl. nonce/deadline/spender). Call
+   `x402Client().register("eip155:8453", scheme).createPayment(<decoded
+   paymentRequired>)`.
+2. Present the captured typed-data to the wallet via EIP-7871 `wallet_sign`;
+   txlink returns the real 65-byte `signature` + `account`.
+3. Substitute the placeholder signature with the real one inside
+   `payload` (JSON replace), attach `accepted` (the chosen requirement), encode
+   the payment to the `PAYMENT-SIGNATURE` header (base64 JSON), and re-POST the
+   original `/v1/uploads/permanent` body + the same `Idempotency-Key`.
+4. A `201` returns the reservation; then `PUT` content / download / delete as
+   usual. A `402` means CDP rejected — read the reason: instrumentation
+   (`instrumentFacilitator` in `src/payment.ts`) logs a short reason on
+   rejection; otherwise `wrangler tail` + a knox retry shows CDP's exact error.
+
+### Caveats / validation
+
+- The `payload`/`spender` above only pin the shape; the exact `PaymentPayload`
+  fields (`accepted`) are scheme-derived, so test against the live CDP and
+  iterate (a rejected permit is safe — no funds move). Use the authenticated
+  `wrangler tail` instrumentation to read the CDP error.
+- The payer (account that signs) must hold ≥ ~$0.01 Base USDC; the recipient is
+  `STUPID_UPLOAD_PAYMENT_ADDRESS` (set in prod).
+- Do **not** hand-write the payload; drive it from the `@x402` stack so
+  nonce/spender/domain derive exactly.
+- After it works, add a contract/unit test (stubbed facilitator) mirroring the
+  `402 → submit` flow (see `test/payment.test.ts`).
+
+### Files to touch
+
+- `skills/stupid-upload/scripts/stupid-upload.ts` — the no-key `--permanent`
+  branch: after the wallet signature, call the submit seam instead of returning
+  `awaitingSignature`.
+- new `skills/stupid-upload/scripts/submit-exact.ts` — capture signer,
+  placeholder→signature substitution, `PAYMENT-SIGNATURE` encode + re-POST.
+- `skills/stupid-upload/references/api.md` + `docs/cli.md` — document the no-key
+  submit + EIP-7871 signing flow.
+- `docs/quickstart.md` — CLI paid example.
+
+Run `bun run format && bun run lint && bun run typecheck && bun run test` before
+committing; update `docs/implementation-notes.md`.
