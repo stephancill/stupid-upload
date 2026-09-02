@@ -20,6 +20,37 @@ describe("GET /f/:id/:filename", () => {
     expect(await res.text()).toBe("hello world");
   });
 
+  it.each([
+    ["image/png", "png", "inline"],
+    ["image/jpeg", "jpg", "inline"],
+    ["image/gif", "gif", "inline"],
+    ["image/webp", "webp", "inline"],
+    ["image/avif", "avif", "inline"],
+  ])(
+    "serves %s images inline so the browser renders them",
+    async (contentType, ext, disposition) => {
+      const payload = new TextEncoder().encode("image-bytes");
+      const { id } = await uploadTemporary(W, payload, {
+        filename: `img.${ext}`,
+        contentType,
+      });
+      const res = await app.request(`/f/${id}/img.${ext}`, {}, W);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-disposition")).toContain(disposition);
+    },
+  );
+
+  it("keeps active content (SVG) as attachments", async () => {
+    const payload = new TextEncoder().encode("<svg/>");
+    const { id } = await uploadTemporary(W, payload, {
+      filename: "img.svg",
+      contentType: "image/svg+xml",
+    });
+    const res = await app.request(`/f/${id}/img.svg`, {}, W);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toContain("attachment");
+  });
+
   it("supports byte ranges over uploaded content", async () => {
     const payload = new TextEncoder().encode("hello world");
     const { id } = await uploadTemporary(W, payload, { contentType: "text/plain" });

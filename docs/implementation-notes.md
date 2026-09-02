@@ -122,6 +122,16 @@ Completed in this pass (2026-09-02):
 
 ## Change Log
 
+### 2026-09-02 (inline image previews)
+
+- File responses now serve safe content inline instead of forcing a download.
+  `buildFileResponse` passes `isInlineSafe(contentType)` to `contentDisposition`,
+  so images (`image/png`, `jpeg`, `gif`, `webp`, `avif`, ...) open in the
+  browser rather than downloading, while active content (SVG, HTML, XML, JS)
+  remains an attachment as before. No change to the drop already served by
+  `contentDisposition`'s `inline` branch. Added `test/files.test.ts` coverage
+  for five image types (inline) and SVG (attachment).
+
 ### 2026-09-02 (web paid uploads)
 
 - Added an expiry radio group to the landing page: temporary (24 hours, ≤1 MiB)

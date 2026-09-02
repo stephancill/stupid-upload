@@ -16,7 +16,7 @@ import { utcDay, reserveQuota, bumpUploadCount, reserveCount } from "./quota";
 import { allowPerMinute } from "./feedback-rate";
 import * as rows from "./db/uploads";
 import { deleteObject } from "./storage";
-import { contentDisposition, SECURITY_HEADERS } from "./security";
+import { contentDisposition, isInlineSafe, SECURITY_HEADERS } from "./security";
 import { isPermanentPaymentEnabled, permanentPaymentMiddleware } from "./payment";
 
 export type Env = Bindings & Record<string, unknown>;
@@ -580,7 +580,10 @@ function buildFileResponse(
   const h = new Headers();
   h.set("etag", etag);
   h.set("content-type", row.content_type);
-  h.set("content-disposition", contentDisposition(row.content_type, row.filename));
+  h.set(
+    "content-disposition",
+    contentDisposition(row.content_type, row.filename, isInlineSafe(row.content_type)),
+  );
   h.set("accept-ranges", "bytes");
   h.set("cache-control", cacheControlFor(row));
   applySecurity(h);
