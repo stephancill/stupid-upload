@@ -135,6 +135,11 @@ Completed in this pass (2026-09-02):
   with the same pricing/`maxTimeoutSeconds` the permanent middleware uses, so
   what the page signs matches what the facilitator settles.
 - Added webpay capture + HTTP tests (tests: 72 total).
+- Moved the landing page client logic to a same-origin `/app.js` (CSP
+  `script-src 'self'`), added tolerant parsing of the txlink signature result
+  (accepts both a JSON string and a pre-parsed object — the string-parse of an
+  object caused the `"[object Object]" is not valid JSON` failure), and added a
+  scannable QR (from `/qrcode-generator.js`) for the wallet approval URL.
 
 ### 2026-09-02 (CLI 0.0.2)
 

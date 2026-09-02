@@ -589,158 +589,15 @@ export function registerDiscovery(): void {
 </form>
 <p id="upload-status" role="status" aria-live="polite"></p>
 <p id="upload-result" hidden>Uploaded: <a id="upload-link"></a></p>
-<p id="wallet-result" hidden><a id="wallet-link" target="_blank" rel="noopener">Approve the payment in your wallet</a>. Waiting for approval...</p>
+<p id="wallet-result" hidden><a id="wallet-link" target="_blank" rel="noopener">Approve the payment in your wallet</a>. Waiting for approval...<span id="wallet-qr"></span></p>
 <h2>From the terminal</h2>
 <pre><code>npx --yes stupid-upload upload ./file</code></pre>
 <h2>Permanent storage</h2>
 <p>Paid with Base USDC via x402. Up to 100 MiB, no scheduled expiration.</p>
 <pre><code>npx --yes stupid-upload upload ./file --permanent</code></pre>
 <p><a href="https://github.com/stephancill/stupid-upload">github</a> - <a href="https://x.com/stephancill">twitter</a> - <a href="https://stupidtech.net">stupidtech.net</a> - <a href="https://github.com/stephancill/stupid-upload/tree/main/skills/stupid-upload">skill</a></p>
-<script>
-const form = document.querySelector("#upload-form");
-const input = document.querySelector("#file");
-const status = document.querySelector("#upload-status");
-const result = document.querySelector("#upload-result");
-const link = document.querySelector("#upload-link");
-const wallet = document.querySelector("#wallet-result");
-const walletLink = document.querySelector("#wallet-link");
-
-const b64 = (value) => btoa(unescape(encodeURIComponent(value)));
-
-function showResult(url, message) {
-  link.href = url;
-  link.textContent = url;
-  result.hidden = false;
-  status.textContent = message;
-}
-
-function sha256hex(bytes) {
-  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const file = input.files?.[0];
-  if (!file) return;
-  const retention = form.elements.retention.value;
-  const limit = retention === "permanent" ? 104857600 : 1048576;
-  if (file.size > limit) {
-    status.textContent = retention === "permanent"
-      ? "Permanent uploads are limited to 100 MiB."
-      : "Temporary uploads are limited to 1 MiB.";
-    return;
-  }
-
-  form.querySelector("button").disabled = true;
-  result.hidden = true;
-  wallet.hidden = true;
-  status.textContent = "Preparing...";
-
-  try {
-    const bytes = await file.arrayBuffer();
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    const idempotencyKey = crypto.randomUUID().replaceAll("-", "");
-    const meta = {
-      filename: file.name,
-      contentType: file.type || "application/octet-stream",
-      sizeBytes: file.size,
-      sha256: sha256hex(digest),
-    };
-
-    if (retention === "temp") {
-      const res = await fetch("/v1/uploads/temporary", {
-        method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-        body: JSON.stringify(meta),
-      });
-      const reservation = await res.json();
-      if (!res.ok) throw new Error(reservation.error?.message || "Could not reserve upload.");
-      status.textContent = "Uploading...";
-      const uploaded = await fetch(reservation.uploadUrl, {
-        method: "PUT",
-        headers: {
-          authorization: "Bearer " + reservation.uploadToken,
-          "content-type": "application/octet-stream",
-        },
-        body: file,
-      });
-      if (uploaded.status !== 201) throw new Error("Could not upload file.");
-      return showResult(reservation.publicUrl, "Upload complete. This link expires 24 hours after upload.");
-    }
-
-    // Permanent: derive the exact payment the x402 route accepts, ask a wallet
-    // to sign it via txlink, then resubmit with PAYMENT-SIGNATURE.
-    const pay = await (await fetch("/v1/payments/captured", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(meta),
-    })).json();
-    if (!pay.typedData || !pay.accepted) throw new Error("Could not quote payment.");
-
-    const sigReq = await (await fetch("https://txlink.stupidtech.net/api/requests", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        method: "wallet_sign",
-        chainId: Number(pay.accepted.network.split(":")[1]),
-        params: { version: "1.0", request: { type: "0x01", data: pay.typedData } },
-      }),
-    })).json();
-    wallet.hidden = false;
-    walletLink.href = sigReq.url;
-    status.textContent = "Approve the payment in your wallet, then this page completes the upload.";
-
-    // Poll txlink until the wallet signs (EIP-7871 returns signature + account).
-    let resolution = null;
-    for (let i = 0; i < 150; i++) {
-      const state = await (await fetch(sigReq.statusUrl)).json();
-      if (state.status === "completed") {
-        resolution = JSON.parse(state.result);
-        break;
-      }
-      if (state.status === "failed") throw new Error("Wallet approval failed.");
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-    if (!resolution?.signature || !resolution?.account) throw new Error("Wallet payment not completed.");
-
-    // Splice the real payer + signature into the captured placeholder payload.
-    const inner = pay.payload.payload;
-    inner.signature = resolution.signature;
-    if (String(inner.authorization.from).toLowerCase() === "0x" + "a".repeat(40)) {
-      inner.authorization.from = resolution.account;
-    }
-    pay.payload.payload = inner;
-
-    const signed = await fetch("/v1/uploads/permanent", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-        "payment-signature": b64(JSON.stringify(pay.payload)),
-      },
-      body: JSON.stringify(meta),
-    });
-    const reservation = await signed.json();
-    if (!signed.ok) throw new Error(reservation.error?.message || "Payment was not accepted.");
-
-    status.textContent = "Uploading...";
-    const uploaded = await fetch(reservation.uploadUrl, {
-      method: "PUT",
-      headers: {
-        authorization: "Bearer " + reservation.uploadToken,
-        "content-type": "application/octet-stream",
-      },
-      body: file,
-    });
-    if (uploaded.status !== 201) throw new Error("Could not upload file.");
-    return showResult(reservation.publicUrl, "Upload complete. This link does not expire.");
-  } catch (error) {
-    status.textContent = error instanceof Error ? error.message : "Upload failed.";
-  } finally {
-    form.querySelector("button").disabled = false;
-  }
-});
-</script>`;
+<script src="/qrcode-generator.js"></script>
+<script src="/app.js"></script>`;
     return c.html(page("stupid upload", body));
   });
 
@@ -822,5 +679,6 @@ function page(title: string, body: string): string {
     "An agent-friendly interface for free temporary uploads and paid long-term uploads.";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
 <meta name="description" content="${description}"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:type" content="website"><meta property="og:url" content="https://upload.stupidtech.net"><meta property="og:image" content="https://upload.stupidtech.net/og.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/png" href="/favicon.png">
-<style>body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.6}code,pre{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}pre{padding:1rem;overflow:auto}form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}input,button{font:inherit}button{padding:.25rem .75rem}</style></head><body>${body}</body></html>`;
+<meta http-equiv="content-security-policy" content="default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; connect-src 'self' https://txlink.stupidtech.net">
+<style>body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.6}code,pre{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}pre{padding:1rem;overflow:auto}form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}input,button{font:inherit}button{padding:.25rem .75rem}canvas{display:block;margin-top:.5rem}</style></head><body>${body}</body></html>`;
 }
